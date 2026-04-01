@@ -22,8 +22,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from qdrant_client import models as qm
-
 from zeta_ima.config import settings
 from zeta_ima.integrations.vault import vault
 
@@ -54,16 +52,12 @@ ROLE_WEIGHTS: dict[str, float] = {
 # ── DB helpers ───────────────────────────────────────────────────────────────
 
 async def init_brain_db() -> None:
-    """Create brain Qdrant collection and PostgreSQL table on startup."""
-    from zeta_ima.memory.session import _get_qdrant, _pg_pool, _get_embedding
+    """Create brain vector collection and PostgreSQL table on startup."""
+    from zeta_ima.memory.session import _pg_pool
+    from zeta_ima.infra.vector_store import get_vector_store
 
-    client = _get_qdrant()
-    existing = [c.name for c in client.get_collections().collections]
-    if BRAIN_COLLECTION not in existing:
-        client.create_collection(
-            collection_name=BRAIN_COLLECTION,
-            vectors_config=qm.VectorParams(size=1536, distance=qm.Distance.COSINE),
-        )
+    vs = get_vector_store()
+    vs.ensure_collection(BRAIN_COLLECTION, vector_size=1536)
 
     # PostgreSQL
     pool = await _pg_pool()
@@ -119,7 +113,8 @@ class AgencyBrain:
         Returns list of dicts with: id, text, category, level, confidence,
         role_weight, contributed_by, tags, score.
         """
-        from zeta_ima.memory.session import _get_qdrant, _get_embedding
+        from zeta_ima.memory.session import _get_embedding
+        from zeta_ima.infra.vector_store import get_vector_store
 
         if category and category not in VALID_CATEGORIES:
             log.warning("query: invalid category %r, ignoring filter", category)
@@ -129,31 +124,31 @@ class AgencyBrain:
             level = None
 
         embedding = await _get_embedding(query_text)
-        client = _get_qdrant()
+        vs = get_vector_store()
 
-        filters = []
+        # Build simple equality filters for the vector store
+        filters: dict[str, Any] = {"status": "active"}
         if category:
-            filters.append(qm.FieldCondition(key="category", match=qm.MatchValue(value=category)))
+            filters["category"] = category
         if level:
-            filters.append(qm.FieldCondition(key="level", match=qm.MatchValue(value=level)))
-        if tags:
-            filters.append(qm.FieldCondition(key="tags", match=qm.MatchAny(any=tags)))
-        filters.append(qm.FieldCondition(key="status", match=qm.MatchValue(value="active")))
+            filters["level"] = level
 
-        qdrant_filter = qm.Filter(must=filters) if filters else None
-
-        hits = client.search(
-            collection_name=BRAIN_COLLECTION,
+        hits = vs.search(
+            collection=BRAIN_COLLECTION,
             query_vector=embedding,
-            limit=top_k,
-            query_filter=qdrant_filter,
-            with_payload=True,
+            top_k=top_k,
+            filters=filters,
+            score_threshold=0.35,
         )
-        results = [
-            {**h.payload, "score": round(h.score, 4), "id": h.id}
-            for h in hits
-            if h.score >= 0.35
-        ]
+
+        results = []
+        for h in hits:
+            payload = h.get("payload", {})
+            # Tag filtering: match if any requested tag is present (post-filter)
+            if tags and not any(t in payload.get("tags", []) for t in tags):
+                continue
+            results.append({**payload, "score": h["score"], "id": h["id"]})
+
         log.debug("brain query: %d results for %r", len(results), query_text[:60])
         return results
 
@@ -175,7 +170,8 @@ class AgencyBrain:
 
         Returns: {"id": str, "action": "created"|"merged"|"conflict"}
         """
-        from zeta_ima.memory.session import _get_qdrant, _pg_pool, _get_embedding
+        from zeta_ima.memory.session import _pg_pool, _get_embedding
+        from zeta_ima.infra.vector_store import get_vector_store
 
         text = item.get("text", "").strip()
         if not text:
@@ -192,15 +188,14 @@ class AgencyBrain:
 
         rw = ROLE_WEIGHTS.get(user_role, 0.5)
         embedding = await _get_embedding(text)
-        client = _get_qdrant()
+        vs = get_vector_store()
         pool = await _pg_pool()
 
         # Check for near-duplicates
-        hits = client.search(
-            collection_name=BRAIN_COLLECTION,
+        hits = vs.search(
+            collection=BRAIN_COLLECTION,
             query_vector=embedding,
-            limit=3,
-            with_payload=True,
+            top_k=3,
         )
 
         entry_id = str(uuid.uuid4())
@@ -208,33 +203,34 @@ class AgencyBrain:
         supersedes_id = None
 
         for h in hits:
-            existing_rw = h.payload.get("role_weight", 0.5)
-            if h.score >= SIMILARITY_OVERRIDE:
+            payload = h.get("payload", {})
+            existing_rw = payload.get("role_weight", 0.5)
+            if h["score"] >= SIMILARITY_OVERRIDE:
                 # latest_wins: only override if our role_weight ≥ existing
                 if rw >= existing_rw:
-                    # Soft-delete old entry in Qdrant
-                    client.set_payload(
-                        collection_name=BRAIN_COLLECTION,
+                    # Soft-delete old entry
+                    vs.set_payload(
+                        collection=BRAIN_COLLECTION,
+                        point_id=h["id"],
                         payload={"status": "superseded"},
-                        points=[h.id],
                     )
                     async with pool.acquire() as conn:
                         await conn.execute(
                             "UPDATE brain_contributions SET status='superseded', updated_at=now() WHERE qdrant_id=$1",
-                            str(h.id),
+                            str(h["id"]),
                         )
-                    supersedes_id = str(h.id)
+                    supersedes_id = str(h["id"])
                     action = "merged"
                     log.info("brain merge: %s supersedes %s", entry_id, supersedes_id)
                 else:
                     # Incoming has lower authority — flag as conflict for human review
                     action = "conflict_skipped"
                     log.info("brain conflict_skipped: incoming rw=%.2f < existing rw=%.2f", rw, existing_rw)
-                    return {"id": str(h.id), "action": action}
+                    return {"id": str(h["id"]), "action": action}
                 break
-            elif h.score >= SIMILARITY_CONFLICT:
+            elif h["score"] >= SIMILARITY_CONFLICT:
                 action = "conflict"
-                log.info("brain conflict flagged: similarity %.4f for incoming text", h.score)
+                log.info("brain conflict flagged: similarity %.4f for incoming text", h["score"])
                 # Still store but mark as conflict
                 break
 
@@ -251,9 +247,11 @@ class AgencyBrain:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        client.upsert(
-            collection_name=BRAIN_COLLECTION,
-            points=[qm.PointStruct(id=entry_id, vector=embedding, payload=payload)],
+        vs.upsert(
+            collection=BRAIN_COLLECTION,
+            point_id=entry_id,
+            vector=embedding,
+            payload=payload,
         )
 
         async with pool.acquire() as conn:
@@ -320,9 +318,10 @@ class AgencyBrain:
     ) -> None:
         """
         Human resolution: accept keeps the entry active; reject soft-deletes it.
-        Also updates the Qdrant payload status.
+        Also updates the vector store payload status.
         """
-        from zeta_ima.memory.session import _get_qdrant, _pg_pool
+        from zeta_ima.memory.session import _pg_pool
+        from zeta_ima.infra.vector_store import get_vector_store
 
         new_status = "active" if resolution == "accept" else "rejected"
         pool = await _pg_pool()
@@ -338,11 +337,11 @@ class AgencyBrain:
                 new_status, entry_id,
             )
 
-        client = _get_qdrant()
-        client.set_payload(
-            collection_name=BRAIN_COLLECTION,
+        vs = get_vector_store()
+        vs.set_payload(
+            collection=BRAIN_COLLECTION,
+            point_id=qdrant_id,
             payload={"status": new_status},
-            points=[qdrant_id],
         )
         log.info("conflict resolved: %s → %s by %s", entry_id, new_status, resolved_by)
         await self._audit(resolved_by, f"conflict_{resolution}", entry_id, {"new_status": new_status})
@@ -391,8 +390,9 @@ class AgencyBrain:
     # ── Cleanup stale entries ─────────────────────────────────────────────────
 
     async def cleanup_stale(self, days_old: int = 30) -> int:
-        """Remove superseded/rejected entries older than `days_old` from Qdrant."""
-        from zeta_ima.memory.session import _get_qdrant, _pg_pool
+        """Remove superseded/rejected entries older than `days_old` from vector store."""
+        from zeta_ima.memory.session import _pg_pool
+        from zeta_ima.infra.vector_store import get_vector_store
 
         pool = await _pg_pool()
         async with pool.acquire() as conn:
@@ -407,15 +407,12 @@ class AgencyBrain:
         if not rows:
             return 0
 
-        client = _get_qdrant()
+        vs = get_vector_store()
         qdrant_ids = [r["qdrant_id"] for r in rows if r["qdrant_id"]]
         pg_ids = [r["id"] for r in rows]
 
         if qdrant_ids:
-            client.delete(
-                collection_name=BRAIN_COLLECTION,
-                points_selector=qm.PointIdsList(points=qdrant_ids),
-            )
+            vs.delete_points(collection=BRAIN_COLLECTION, point_ids=qdrant_ids)
 
         async with pool.acquire() as conn:
             await conn.execute(

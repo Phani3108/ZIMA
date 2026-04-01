@@ -20,15 +20,6 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 
-from qdrant_client import QdrantClient
-from qdrant_client.models import (
-    Distance,
-    Filter,
-    FieldCondition,
-    MatchValue,
-    PointStruct,
-    VectorParams,
-)
 from sqlalchemy import (
     Boolean,
     Column,
@@ -98,22 +89,17 @@ learning_signals = Table(
 
 
 async def init_learning_db() -> None:
-    """Create learning tables and Qdrant collections."""
+    """Create learning tables and vector collections."""
     async with _engine.begin() as conn:
         await conn.run_sync(_metadata.create_all)
 
-    # Qdrant collections
+    # Vector collections via abstraction
     try:
-        qdrant = QdrantClient(url=settings.qdrant_url)
-        existing = {c.name for c in qdrant.get_collections().collections}
-
+        from zeta_ima.infra.vector_store import get_vector_store
+        vs = get_vector_store()
         for coll_name in (COLLECTION_NAME, DIRECTIONAL_COLLECTION):
-            if coll_name not in existing:
-                qdrant.create_collection(
-                    collection_name=coll_name,
-                    vectors_config=VectorParams(size=EMBEDDING_DIMS, distance=Distance.COSINE),
-                )
-                log.info(f"Created Qdrant collection: {coll_name}")
+            vs.ensure_collection(coll_name, vector_size=EMBEDDING_DIMS)
+            log.info(f"Ensured vector collection: {coll_name}")
     except Exception as e:
         log.warning(f"Failed to create learning memory collections: {e}")
 
@@ -161,30 +147,27 @@ async def record_outcome(
         )
         await session.commit()
 
-    # Also store in Qdrant for semantic retrieval (if output exists)
+    # Also store in vector store for semantic retrieval (if output exists)
     if final_output:
         try:
             from zeta_ima.memory.brand import _embed
+            from zeta_ima.infra.vector_store import get_vector_store
             vector = await _embed(final_output[:2000])
-            qdrant = QdrantClient(url=settings.qdrant_url)
-            qdrant.upsert(
-                collection_name=COLLECTION_NAME,
-                points=[
-                    PointStruct(
-                        id=outcome_id,
-                        vector=vector,
-                        payload={
-                            "type": "approved_output",
-                            "skill_id": skill_id,
-                            "prompt_id": prompt_id,
-                            "llm_used": llm_used,
-                            "approved_first_try": approved_first_try,
-                            "output_preview": final_output[:500],
-                            "workflow_id": workflow_id,
-                            "created_at": now.isoformat(),
-                        },
-                    )
-                ],
+            vs = get_vector_store()
+            vs.upsert(
+                collection=COLLECTION_NAME,
+                point_id=outcome_id,
+                vector=vector,
+                payload={
+                    "type": "approved_output",
+                    "skill_id": skill_id,
+                    "prompt_id": prompt_id,
+                    "llm_used": llm_used,
+                    "approved_first_try": approved_first_try,
+                    "output_preview": final_output[:500],
+                    "workflow_id": workflow_id,
+                    "created_at": now.isoformat(),
+                },
             )
         except Exception as e:
             log.warning(f"Failed to store learning vector: {e}")
@@ -308,22 +291,21 @@ async def get_past_successes(
 
     try:
         from zeta_ima.memory.brand import _embed
+        from zeta_ima.infra.vector_store import get_vector_store
         vector = await _embed(query)
-        qdrant = QdrantClient(url=settings.qdrant_url)
-        results = qdrant.search(
-            collection_name=COLLECTION_NAME,
+        vs = get_vector_store()
+        results = vs.search(
+            collection=COLLECTION_NAME,
             query_vector=vector,
-            query_filter=Filter(
-                must=[FieldCondition(key="skill_id", match=MatchValue(value=skill_id))]
-            ),
-            limit=top_k,
+            top_k=top_k,
+            filters={"skill_id": skill_id},
         )
         return [
             {
-                "output_preview": r.payload.get("output_preview", ""),
-                "llm_used": r.payload.get("llm_used", ""),
-                "approved_first_try": r.payload.get("approved_first_try", False),
-                "score": r.score,
+                "output_preview": r["payload"].get("output_preview", ""),
+                "llm_used": r["payload"].get("llm_used", ""),
+                "approved_first_try": r["payload"].get("approved_first_try", False),
+                "score": r["score"],
             }
             for r in results
         ]
@@ -442,62 +424,60 @@ async def record_directional_signal(
     Conflicting signals are stored with a supersedes relationship.
     """
     from zeta_ima.memory.brand import _embed
+    from zeta_ima.infra.vector_store import get_vector_store
 
     signal_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     vector = await _embed(signal_text[:2000])
-    qdrant = QdrantClient(url=settings.qdrant_url)
+    vs = get_vector_store()
 
     # Check for near-duplicate or conflicting signals
-    existing = qdrant.search(
-        collection_name=DIRECTIONAL_COLLECTION,
+    existing = vs.search(
+        collection=DIRECTIONAL_COLLECTION,
         query_vector=vector,
-        limit=3,
+        top_k=3,
         score_threshold=0.85,
     )
 
     supersedes_id = ""
     if existing:
         top = existing[0]
-        if top.score > 0.92:
+        top_payload = top.get("payload", {})
+        if top["score"] > 0.92:
             # Near-duplicate: merge (update existing, don't create new)
-            qdrant.set_payload(
-                collection_name=DIRECTIONAL_COLLECTION,
+            vs.set_payload(
+                collection=DIRECTIONAL_COLLECTION,
+                point_id=top["id"],
                 payload={
                     "last_updated": now.isoformat(),
-                    "access_count": (top.payload.get("access_count", 0) + 1),
-                    "role_weight": max(top.payload.get("role_weight", 1.0), role_weight),
+                    "access_count": (top_payload.get("access_count", 0) + 1),
+                    "role_weight": max(top_payload.get("role_weight", 1.0), role_weight),
                 },
-                points=[top.id],
             )
-            log.debug(f"Merged directional signal into existing {top.id}")
-            return str(top.id)
-        elif top.score > 0.85:
+            log.debug(f"Merged directional signal into existing {top['id']}")
+            return str(top["id"])
+        elif top["score"] > 0.85:
             # Potentially contradictory — store new but mark supersedes
-            supersedes_id = str(top.id)
-            log.info(f"New directional signal supersedes {supersedes_id} (score={top.score:.2f})")
+            supersedes_id = str(top["id"])
+            log.info(f"New directional signal supersedes {supersedes_id} (score={top['score']:.2f})")
 
-    # Store in Qdrant
-    qdrant.upsert(
-        collection_name=DIRECTIONAL_COLLECTION,
-        points=[
-            PointStruct(
-                id=signal_id,
-                vector=vector,
-                payload={
-                    "text": signal_text,
-                    "level": level,
-                    "source_user_id": source_user_id,
-                    "confidence": confidence,
-                    "role_weight": role_weight,
-                    "tags": tags or [],
-                    "supersedes": supersedes_id,
-                    "created_at": now.isoformat(),
-                    "last_updated": now.isoformat(),
-                    "access_count": 0,
-                },
-            )
-        ],
+    # Store in vector store
+    vs.upsert(
+        collection=DIRECTIONAL_COLLECTION,
+        point_id=signal_id,
+        vector=vector,
+        payload={
+            "text": signal_text,
+            "level": level,
+            "source_user_id": source_user_id,
+            "confidence": confidence,
+            "role_weight": role_weight,
+            "tags": tags or [],
+            "supersedes": supersedes_id,
+            "created_at": now.isoformat(),
+            "last_updated": now.isoformat(),
+            "access_count": 0,
+        },
     )
 
     # Store in PostgreSQL
@@ -651,12 +631,12 @@ async def persist_reflection_insights(
     return persisted
 
 
-async def get_learning_guidance(skill_id: str, brief: str = "", limit: int = 5) -> str:
+async def get_learning_guidance(skill_id: str, brief: str = "", limit: int = 5, team_id: str = "") -> str:
     """
     Build a learning guidance block for injection into copy prompts.
 
     Combines common edit patterns + past rejection signals + directional signals
-    into a concise instruction block.
+    + team-specific feedback patterns + campaign score insights.
     """
     parts: list[str] = []
 
@@ -689,5 +669,29 @@ async def get_learning_guidance(skill_id: str, brief: str = "", limit: int = 5) 
         parts.append("\nAGENCY DIRECTION:")
         for sig in signals:
             parts.append(f"  - {sig.get('signal_text', '')}")
+
+    # 4. Team-specific guidance (if team_id provided)
+    if team_id:
+        try:
+            from zeta_ima.memory.team_profile import get_team_guidance
+            team_guidance = await get_team_guidance(team_id)
+            if team_guidance:
+                parts.append(f"\nTEAM-SPECIFIC GUIDANCE:\n{team_guidance}")
+        except Exception:
+            pass
+
+    # 5. Score-based replication hints
+    if team_id and brief:
+        try:
+            from zeta_ima.memory.scores import get_score_trend
+            scores = await get_score_trend(team_id=team_id, limit=5)
+            high_scores = [s for s in scores if s.get("composite_score", 0) >= 70]
+            low_scores = [s for s in scores if 0 < s.get("composite_score", 0) < 40]
+            if high_scores:
+                parts.append(f"\nREPLICATE: {len(high_scores)} recent campaigns scored 70+. Apply similar patterns.")
+            if low_scores:
+                parts.append(f"AVOID: {len(low_scores)} recent campaigns scored below 40. Check and avoid their patterns.")
+        except Exception:
+            pass
 
     return "\n".join(parts) if parts else ""

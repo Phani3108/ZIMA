@@ -23,6 +23,7 @@ Dynamic pipeline topology:
 """
 
 from langgraph.graph import END, StateGraph
+from langgraph.types import interrupt
 
 from zeta_ima.agents.nodes.approval_node import approval_node
 from zeta_ima.agents.nodes.canva_node import canva_node
@@ -32,6 +33,8 @@ from zeta_ima.agents.nodes.jira_node import jira_node
 from zeta_ima.agents.nodes.memory_node import memory_node
 from zeta_ima.agents.nodes.research_node import research_node
 from zeta_ima.agents.nodes.review_node import review_node
+from zeta_ima.agents.nodes.recall_node import recall_node, await_recall_node
+from zeta_ima.agents.meeting import run_meeting, should_skip_meeting
 from zeta_ima.agents.router import classify_intent
 from zeta_ima.agents.state import AgentState
 from zeta_ima.memory.session import get_checkpointer
@@ -48,6 +51,21 @@ def _get_design_node():
     return design_node
 
 
+def _get_seo_node():
+    from zeta_ima.agents.nodes.seo_node import seo_node
+    return seo_node
+
+
+def _get_competitive_intel_node():
+    from zeta_ima.agents.nodes.competitive_intel_node import competitive_intel_node
+    return competitive_intel_node
+
+
+def _get_product_marketing_node():
+    from zeta_ima.agents.nodes.product_marketing_node import product_marketing_node
+    return product_marketing_node
+
+
 # Node registry: maps pipeline agent names to node functions
 def _get_node_registry() -> dict:
     return {
@@ -62,7 +80,71 @@ def _get_node_registry() -> dict:
         "canva": canva_node,
         "pm": _get_pm_node(),
         "design": _get_design_node(),
+        "seo": _get_seo_node(),
+        "competitive_intel": _get_competitive_intel_node(),
+        "product_marketing": _get_product_marketing_node(),
     }
+
+
+# ── Meeting nodes (Phase 4 — agent scrum before execution) ──
+
+async def meeting_node(state: AgentState) -> dict:
+    """Run a scrum meeting where agents discuss the brief and produce a plan."""
+    brief = state.get("current_brief", "")
+    pipeline = state.get("pipeline", [])
+
+    if should_skip_meeting(brief):
+        return {
+            "plan_status": "skipped",
+            "meeting_transcript": [],
+            "meeting_plan": {"summary": "Brief is simple — skipping planning meeting."},
+        }
+
+    plan = await run_meeting(
+        brief=brief,
+        pipeline=pipeline,
+        kb_context=state.get("kb_context"),
+        brain_context=state.get("brain_context"),
+        modifications=state.get("user_plan_modifications", ""),
+    )
+
+    return {
+        "meeting_transcript": [m.to_dict() for m in plan.transcript],
+        "meeting_plan": plan.to_dict(),
+        "plan_status": "awaiting_user",
+        "stage": "planning",
+    }
+
+
+def await_plan_approval_node(state: AgentState) -> dict:
+    """Pause graph for user to approve/modify/cancel the meeting plan."""
+    plan_status = state.get("plan_status", "")
+
+    # Skip interrupt if meeting was skipped
+    if plan_status == "skipped":
+        return {"plan_status": "approved"}
+
+    decision_payload = interrupt({
+        "meeting_transcript": state.get("meeting_transcript", []),
+        "meeting_plan": state.get("meeting_plan", {}),
+    })
+
+    decision = decision_payload.get("decision", "approve")  # approve | modify | cancel
+    modifications = decision_payload.get("modifications", "")
+
+    if decision == "cancel":
+        return {
+            "plan_status": "cancelled",
+            "stage": "done",
+            "messages": [{"role": "assistant", "content": "Task cancelled by user."}],
+        }
+    elif decision == "modify":
+        return {
+            "plan_status": "modified",
+            "user_plan_modifications": modifications,
+        }
+    else:
+        return {"plan_status": "approved"}
 
 
 # ── Original hardcoded graph (backward compatible) ──
@@ -150,6 +232,16 @@ def build_graph():
 
 # ── Dynamic pipeline graph (Genesis v2) ──
 
+def _after_plan_approval(state: AgentState) -> str:
+    """Route after plan approval: approved → execute, modified → re-meet, cancelled → end."""
+    status = state.get("plan_status", "approved")
+    if status == "cancelled":
+        return "tool_done"
+    if status == "modified":
+        return "meeting"
+    return "pipeline_start"  # placeholder resolved at build time
+
+
 def build_pipeline_graph(pipeline: list[str]):
     """
     Build a LangGraph from an ordered pipeline of agent names.
@@ -160,6 +252,7 @@ def build_pipeline_graph(pipeline: list[str]):
       ["research", "jira", "tool_done"]
 
     Special handling:
+      - Meeting + plan approval are prepended (skipped for simple briefs)
       - "review" → "approval" edge has a conditional loop-back to the agent before review
       - "approval" interrupts for human input and has conditional routing
       - "tool_done" is the terminal node for tool-only pipelines
@@ -180,12 +273,18 @@ def build_pipeline_graph(pipeline: list[str]):
             normalized.append("save_memory")
     pipeline = normalized
 
-    # Always need tool_done node available
+    # Always need tool_done and save_memory nodes available
     builder.add_node("tool_done", tool_done_node)
     builder.add_node("save_memory", memory_node)
 
+    # ── Meeting phase (prepended before execution pipeline) ──
+    builder.add_node("recall", recall_node)
+    builder.add_node("await_recall", await_recall_node)
+    builder.add_node("meeting", meeting_node)
+    builder.add_node("await_plan_approval", await_plan_approval_node)
+
     # Add all pipeline nodes
-    added = {"tool_done", "save_memory"}
+    added = {"tool_done", "save_memory", "recall", "await_recall", "meeting", "await_plan_approval"}
     for name in pipeline:
         if name not in added:
             node_fn = node_registry.get(name)
@@ -194,8 +293,28 @@ def build_pipeline_graph(pipeline: list[str]):
             builder.add_node(name, node_fn)
             added.add(name)
 
-    # Set entry point
-    builder.set_entry_point(pipeline[0])
+    # ── Entry: recall → await_recall → meeting → await_plan_approval → first pipeline agent ──
+    builder.set_entry_point("recall")
+    builder.add_edge("recall", "await_recall")
+    builder.add_edge("await_recall", "meeting")
+    builder.add_edge("meeting", "await_plan_approval")
+
+    first_agent = pipeline[0] if pipeline else "tool_done"
+
+    # Plan approval routing: approve → execute, modify → re-meet, cancel → end
+    def _plan_router(state: AgentState) -> str:
+        status = state.get("plan_status", "approved")
+        if status == "cancelled":
+            return "tool_done"
+        if status == "modified":
+            return "meeting"
+        return first_agent
+
+    builder.add_conditional_edges("await_plan_approval", _plan_router, {
+        "tool_done": "tool_done",
+        "meeting": "meeting",
+        first_agent: first_agent,
+    })
 
     # Build edges
     interrupt_nodes = []
@@ -230,7 +349,7 @@ def build_pipeline_graph(pipeline: list[str]):
     checkpointer = get_checkpointer()
     return builder.compile(
         checkpointer=checkpointer,
-        interrupt_before=interrupt_nodes or ["await_approval"],
+        interrupt_before=list(set(interrupt_nodes + ["await_plan_approval", "await_recall"])),
     )
 
 

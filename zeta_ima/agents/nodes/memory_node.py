@@ -125,6 +125,21 @@ async def memory_node(state: AgentState) -> dict:
     except Exception:
         pass
 
+    # Archive conversation session
+    try:
+        from zeta_ima.memory.conversation_archive import archive_session
+        await archive_session(
+            team_id=state.get("team_id", "__default__"),
+            user_id=state.get("user_id", ""),
+            brief=state["current_brief"],
+            pipeline_id=state.get("intent", ""),
+            messages=state.get("messages", []),
+            outcome="approved",
+            tags=[state.get("intent", "copy")],
+        )
+    except Exception as e:
+        log.debug("Conversation archive skipped: %s", e)
+
     return {
         "stage": "done",
         "messages": [

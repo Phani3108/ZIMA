@@ -45,6 +45,30 @@ pipelines:
     keywords: [confluence, wiki, publish page, document]
     priority: low
 
+  seo_content:
+    description: "SEO-optimised content: research → SEO → PM → copy → review → approval"
+    agents: [research, seo, pm, copy, review, approval]
+    keywords: [seo, search engine, organic, keywords, rank, serp, meta tags, seo blog, seo article]
+    priority: high
+
+  competitive_analysis:
+    description: "Competitive intelligence report: research → competitive intel → tool_done"
+    agents: [research, competitive_intel, tool_done]
+    keywords: [competitor, competitive analysis, market landscape, positioning, benchmark, rival]
+    priority: medium
+
+  product_launch:
+    description: "Full product launch: research → competitive intel → product marketing → PM → copy → design → review → approval"
+    agents: [research, competitive_intel, product_marketing, pm, copy, design, review, approval]
+    keywords: [product launch, go to market, gtm, launch campaign, new product, product release]
+    priority: high
+
+  content_calendar:
+    description: "Content calendar planning: research → SEO → product marketing → PM → tool_done"
+    agents: [research, seo, product_marketing, pm, tool_done]
+    keywords: [content calendar, content plan, editorial calendar, publishing schedule, content strategy]
+    priority: medium
+
 # Default pipeline when no match is found (LLM classification or fallback)
 default_pipeline: quick_copy
 

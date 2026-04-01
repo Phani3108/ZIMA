@@ -19,12 +19,11 @@ import logging
 import re
 from pathlib import Path
 
-from openai import AsyncOpenAI
-
 from zeta_ima.agents.state import AgentState
+from zeta_ima.agents.roles import role_registry
 from zeta_ima.agents.reflection import make_reflection_loop
-from zeta_ima.config import settings
-from zeta_ima.orchestrator.a2a import AgentMessage, get_latest_handoff
+from zeta_ima.config import settings, get_openai_client
+from zeta_ima.orchestrator.a2a import AgentMessage, emit, get_latest_handoff
 
 log = logging.getLogger(__name__)
 
@@ -79,8 +78,10 @@ async def review_node(state: AgentState) -> dict:
         pass  # Fallback to original draft if reflection fails
 
     # ── Phase 2: Final rubric scoring ────────────────────────────────────────
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    system_prompt = _PROMPT_PATH.read_text()
+    client = get_openai_client()
+    base_prompt = _PROMPT_PATH.read_text()
+    role = role_registry.get_by_node("review")
+    system_prompt = f"{role.system_prompt_prefix()}\n\n{base_prompt}" if role else base_prompt
 
     prompt = (
         f"Brief: {brief}\n\n"
@@ -142,10 +143,8 @@ async def review_node(state: AgentState) -> dict:
             log.debug("Reflection persistence failed: %s", e)
 
     # ── Phase 4: Emit A2A feedback message ───────────────────────────────────
-    agent_messages.append(AgentMessage(
-        from_agent="review",
-        to_agent="approval",
-        message_type="feedback",
+    agent_messages.append(emit(
+        "review", "approval", "feedback",
         payload={
             "scores": review.get("scores", {}),
             "passed": review.get("passed", False),
@@ -156,7 +155,26 @@ async def review_node(state: AgentState) -> dict:
         ),
     ).to_dict())
 
-    return {
+    # ── Phase 5: Confidence-gated auto-approval ──────────────────────────────
+    auto_approved = False
+    if review["passed"] and settings.auto_approve_enabled:
+        scores = review.get("scores", {})
+        all_above_min = all(
+            (v or 0) >= settings.auto_approve_min_score
+            for v in scores.values()
+            if v is not None
+        )
+        brand_fit_ok = (scores.get("brand_fit") or 0) >= settings.auto_approve_brand_fit
+        if all_above_min and brand_fit_ok:
+            auto_approved = True
+            next_stage = "done"
+            agent_messages.append(emit(
+                "review", "all", "status_update",
+                payload={"auto_approved": True, "scores": scores},
+                context_summary="Auto-approved: all scores exceeded thresholds.",
+            ).to_dict())
+
+    result = {
         "review_result": review,
         "stage": next_stage,
         "current_draft": {**state["current_draft"], "text": polished_draft},
@@ -173,7 +191,11 @@ async def review_node(state: AgentState) -> dict:
                         if reflection_result else ""
                     )
                     + (" (forcing human review after max revisions)" if force_human and not review["passed"] else "")
+                    + (" ✅ Auto-approved (high confidence)" if auto_approved else "")
                 ),
             }
         ],
     }
+    if auto_approved:
+        result["approval_decision"] = "approve"
+    return result

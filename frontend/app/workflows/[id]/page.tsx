@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { workflows } from "@/lib/api";
+import AgentTimeline from "@/components/AgentTimeline";
 
 type Stage = {
   id: string;
@@ -62,6 +63,7 @@ export default function WorkflowDetailPage() {
   const workflowId = params.id as string;
 
   const [wf, setWf] = useState<WorkflowDetail | null>(null);
+  const [timeline, setTimeline] = useState<any[]>([]);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [editInstruction, setEditInstruction] = useState("");
@@ -70,6 +72,7 @@ export default function WorkflowDetailPage() {
 
   const load = useCallback(() => {
     workflows.get(workflowId).then(setWf);
+    workflows.timeline(workflowId).then(setTimeline).catch(() => {});
   }, [workflowId]);
 
   useEffect(() => {
@@ -369,6 +372,16 @@ export default function WorkflowDetailPage() {
           );
         })}
       </div>
+
+      {/* Agent A2A Timeline */}
+      {timeline.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">Agent Activity Timeline</h2>
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <AgentTimeline events={timeline} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

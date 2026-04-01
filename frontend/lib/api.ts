@@ -73,6 +73,9 @@ export const workflows = {
     }),
   cancel: (id: string) =>
     fetchJSON(`/workflows/${id}`, { method: "DELETE" }),
+  timeline: (id: string) => fetchJSON(`/workflows/${id}/timeline`),
+  pending: () => fetchJSON("/workflows/pending"),
+  digest: () => fetchJSON("/workflows/digest"),
 };
 
 // ─── Dashboard ─────────────────────────────────────────────────────

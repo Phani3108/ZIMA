@@ -38,6 +38,9 @@ from zeta_ima.api.routes.schedules import router as schedules_router
 from zeta_ima.api.routes.experiments import router as experiments_router
 from zeta_ima.api.routes.costs import router as costs_router
 from zeta_ima.api.routes.teams_collab import router as teams_collab_router
+from zeta_ima.api.routes.history import router as history_router
+from zeta_ima.api.routes.scores import router as scores_router
+from zeta_ima.api.routes.prompts import router as prompts_router
 from zeta_ima.memory.brand import ensure_collection
 from zeta_ima.memory.campaign import init_db
 from zeta_ima.ingest.pipeline import init_ingest_db
@@ -64,16 +67,25 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup():
-        ensure_collection()            # Qdrant: brand_voice
+        ensure_collection()            # Vector store: brand_voice
         await init_db()                # PostgreSQL: campaigns, approved_outputs, conversation_refs
-        await init_ingest_db()         # PostgreSQL: ingest_jobs + Qdrant: knowledge_base
+        await init_ingest_db()         # PostgreSQL: ingest_jobs + Vector store: knowledge_base
         await init_workflow_db()       # PostgreSQL: workflows, workflow_stages, workflow_escalations
         await vault.init()             # PostgreSQL: integration_keys
+
+        # Learning document store (new tables for phases H-M)
+        try:
+            from zeta_ima.infra.document_store import get_document_store
+            ds = get_document_store()
+            await ds.init()            # 6 new tables: conversation_archive, team_learning_profiles, etc.
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Document store init: {e}")
 
         # Phase 3b/3c init
         try:
             from zeta_ima.memory.learning import init_learning_db
-            await init_learning_db()   # PostgreSQL: workflow_outcomes + Qdrant: learning_memory, directional_memory
+            await init_learning_db()   # PostgreSQL: workflow_outcomes + Vector store: learning_memory, directional_memory
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"Learning memory init: {e}")
@@ -95,7 +107,7 @@ def create_app() -> FastAPI:
         # Genesis v2 init
         try:
             from zeta_ima.memory.brain import init_brain_db
-            await init_brain_db()      # Qdrant: agency_brain + PostgreSQL: brain_contributions
+            await init_brain_db()      # Vector store: agency_brain + PostgreSQL: brain_contributions
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"Brain DB init: {e}")
@@ -198,6 +210,11 @@ def create_app() -> FastAPI:
     app.include_router(experiments_router)
     app.include_router(costs_router)
     app.include_router(teams_collab_router)
+
+    # Learning moat
+    app.include_router(history_router)
+    app.include_router(scores_router)
+    app.include_router(prompts_router)
 
     # WebSocket endpoints
     app.include_router(workflow_ws_router)

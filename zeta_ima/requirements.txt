@@ -44,9 +44,10 @@ tiktoken>=0.6.0           # Token counting for chunking
 # Encryption (API key vault)
 cryptography>=42.0.0      # Fernet symmetric encryption
 
-# Azure (Key Vault + Graph API proactive messaging)
+# Azure (Key Vault + Graph API proactive messaging + Blob Storage)
 azure-keyvault-secrets>=4.7.0
 azure-identity>=1.15.0
+azure-storage-blob>=12.19.0
 msal>=1.26.0
 
 # Auth

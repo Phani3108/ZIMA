@@ -13,19 +13,18 @@ Flow:
 import logging
 from pathlib import Path
 
-from openai import AsyncOpenAI
-
 from zeta_ima.agents.state import AgentState
-from zeta_ima.config import settings
+from zeta_ima.agents.roles import role_registry
+from zeta_ima.config import settings, get_openai_client
 from zeta_ima.memory.brand import search_brand_examples
-from zeta_ima.orchestrator.a2a import AgentMessage, get_latest_handoff, build_context_from_messages
+from zeta_ima.orchestrator.a2a import AgentMessage, emit, get_latest_handoff, build_context_from_messages
 
 log = logging.getLogger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "copy_agent.md"
 
 
-async def _compress_history(messages: list, client: AsyncOpenAI) -> list:
+async def _compress_history(messages: list, client) -> list:
     """
     After 10 turns, summarise old turns to a 3-bullet system message and keep
     the last 3 verbatim. This prevents context bloat on long sessions.
@@ -57,7 +56,7 @@ async def _compress_history(messages: list, client: AsyncOpenAI) -> list:
 
 async def copy_node(state: AgentState) -> dict:
     """Generate a copy draft using GPT-4o + brand context + learning guidance + A2A context."""
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    client = get_openai_client()
 
     # 1. Brand context from long-term memory
     brand_examples = await search_brand_examples(state["current_brief"])
@@ -88,7 +87,9 @@ async def copy_node(state: AgentState) -> dict:
     history = await _compress_history(list(state.get("messages", [])), client)
 
     # 5. Build messages for GPT-4o
-    system_prompt = _PROMPT_PATH.read_text()
+    base_prompt = _PROMPT_PATH.read_text()
+    role = role_registry.get_by_node("copy")
+    system_prompt = f"{role.system_prompt_prefix()}\n\n{base_prompt}" if role else base_prompt
     brand_block = "\n\n".join(
         f"Example {i + 1}:\n{ex}" for i, ex in enumerate(brand_examples)
     ) if brand_examples else "No prior examples yet — apply the brand voice guidelines above."
@@ -128,10 +129,8 @@ async def copy_node(state: AgentState) -> dict:
     iteration = state.get("iteration_count", 0) + 1
 
     # 7. A2A: send response to next agent in pipeline
-    agent_messages.append(AgentMessage(
-        from_agent="copy",
-        to_agent="review",
-        message_type="response",
+    agent_messages.append(emit(
+        "copy", "review", "response",
         payload={"draft_iteration": iteration},
         context_summary=f"Draft #{iteration} generated ({len(draft_text or '')} chars)",
         handoff_instructions=f"Review this draft against the brief: {state['current_brief'][:200]}",

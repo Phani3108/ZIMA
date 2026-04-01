@@ -62,6 +62,25 @@ def approval_node(state: AgentState) -> dict:
         except Exception as e:
             log.debug("Rejection learning failed (non-fatal): %s", e)
 
+    # ── Archive rejected session ──
+    if decision == "reject":
+        try:
+            import asyncio
+            from zeta_ima.memory.conversation_archive import archive_session
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(archive_session(
+                    team_id=state.get("team_id", "__default__"),
+                    user_id=state.get("user_id", ""),
+                    brief=state.get("current_brief", ""),
+                    pipeline_id=state.get("intent", ""),
+                    messages=state.get("messages", []),
+                    outcome="rejected",
+                    tags=[state.get("intent", "copy")],
+                ))
+        except Exception:
+            pass
+
     return {
         "approval_decision": decision,
         "approval_comment": comment,

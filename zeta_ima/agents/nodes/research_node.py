@@ -3,11 +3,9 @@ Research node — searches knowledge_base, agency brain, and injects results as 
 Runs before all other agents to provide grounding context.
 """
 
-from openai import AsyncOpenAI
-
 from zeta_ima.agents.state import AgentState
-from zeta_ima.config import settings
-from zeta_ima.memory.brand import _qdrant, _openai
+from zeta_ima.config import settings, get_openai_client
+from zeta_ima.memory.brand import _qdrant
 
 
 async def research_node(state: AgentState) -> dict:
@@ -17,7 +15,8 @@ async def research_node(state: AgentState) -> dict:
         return {"kb_context": [], "brain_context": []}
 
     # Embed the brief
-    resp = await _openai.embeddings.create(model="text-embedding-3-small", input=brief)
+    client = get_openai_client()
+    resp = await client.embeddings.create(model=settings.embedding_model, input=brief)
     vector = resp.data[0].embedding
 
     # Search knowledge_base collection

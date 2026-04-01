@@ -1,11 +1,16 @@
 """
 Adaptive Card templates for the Zeta IMA Teams bot.
 
-Structure reused from RDT 6/scripts/nightly_metrics.py's create_teams_card().
-All cards use Adaptive Cards v1.4 schema (compatible with Teams).
+All cards use Adaptive Cards v1.5 schema (compatible with Teams).
+Cards follow the split: Teams = quick action, Web = full detail.
+Every card includes a "View details" Action.OpenUrl to the web dashboard.
 """
 
-from typing import Optional
+from typing import List, Optional
+
+from zeta_ima.config import settings
+
+_FRONTEND = settings.frontend_url
 
 
 def draft_approval_card(
@@ -13,6 +18,7 @@ def draft_approval_card(
     review: dict,
     iteration: int,
     brief: str,
+    workflow_id: str = "",
 ) -> dict:
     """
     Approval card shown to the user after a draft passes the review agent.
@@ -29,14 +35,37 @@ def draft_approval_card(
     score_facts.append({"title": "Review verdict", "value": review.get("reason", "—")})
     score_facts.append({"title": "Iteration", "value": str(iteration)})
 
+    actions = [
+        {
+            "type": "Action.Execute",
+            "title": "✅ Approve",
+            "verb": "approve",
+            "data": {"action": "approve"},
+            "style": "positive",
+        },
+        {
+            "type": "Action.Execute",
+            "title": "❌ Reject & Revise",
+            "verb": "reject",
+            "data": {"action": "reject"},
+            "style": "destructive",
+        },
+    ]
+    if workflow_id:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "View details →",
+            "url": f"{_FRONTEND}/workflows/{workflow_id}",
+        })
+
     return {
         "type": "AdaptiveCard",
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-        "version": "1.4",
+        "version": "1.5",
         "body": [
             {
                 "type": "TextBlock",
-                "text": f"Draft #{iteration} — Ready for Your Review",
+                "text": f"📝 Draft #{iteration} — Ready for Your Review",
                 "weight": "Bolder",
                 "size": "Medium",
                 "color": "Accent",
@@ -50,7 +79,7 @@ def draft_approval_card(
             {"type": "Separator"},
             {
                 "type": "TextBlock",
-                "text": draft,
+                "text": draft[:2000],
                 "wrap": True,
             },
             {"type": "Separator"},
@@ -64,23 +93,337 @@ def draft_approval_card(
                 "placeholder": "Optional feedback (shown to agent if you Reject)...",
                 "isMultiline": True,
             },
-        ],
-        "actions": [
+            {"type": "Separator"},
             {
-                "type": "Action.Execute",
-                "title": "Approve",
-                "verb": "approve",
-                "data": {"action": "approve"},
-                "style": "positive",
+                "type": "TextBlock",
+                "text": "Rate this output (optional):",
+                "isSubtle": True,
             },
             {
-                "type": "Action.Execute",
-                "title": "Reject & Revise",
-                "verb": "reject",
-                "data": {"action": "reject"},
-                "style": "destructive",
+                "type": "Input.ChoiceSet",
+                "id": "rating",
+                "style": "compact",
+                "placeholder": "1-5 stars",
+                "choices": [
+                    {"title": "⭐ 1 — Poor", "value": "1"},
+                    {"title": "⭐⭐ 2 — Below average", "value": "2"},
+                    {"title": "⭐⭐⭐ 3 — Average", "value": "3"},
+                    {"title": "⭐⭐⭐⭐ 4 — Good", "value": "4"},
+                    {"title": "⭐⭐⭐⭐⭐ 5 — Excellent", "value": "5"},
+                ],
+            },
+            {
+                "type": "Input.ChoiceSet",
+                "id": "feedback_tags",
+                "isMultiSelect": True,
+                "style": "compact",
+                "placeholder": "Select feedback tags...",
+                "choices": [
+                    {"title": "Tone perfect", "value": "Tone perfect"},
+                    {"title": "Great CTA", "value": "Great CTA"},
+                    {"title": "On-brand", "value": "On-brand"},
+                    {"title": "Too formal", "value": "Too formal"},
+                    {"title": "Too casual", "value": "Too casual"},
+                    {"title": "Off-brand", "value": "Off-brand"},
+                    {"title": "Too long", "value": "Too long"},
+                    {"title": "Too short", "value": "Too short"},
+                    {"title": "Great structure", "value": "Great structure"},
+                    {"title": "Missing key info", "value": "Missing key info"},
+                ],
             },
         ],
+        "actions": actions,
+    }
+
+
+def meeting_plan_card(
+    transcript: List[dict],
+    plan: dict,
+    brief: str,
+    workflow_id: str = "",
+) -> dict:
+    """
+    Scrum meeting card — shows agent discussion summary + plan.
+    User can Continue, Modify, or Cancel.
+    """
+    # Build transcript text (max 5 messages in Teams, rest on web)
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": "📋 Agency Planning Meeting",
+            "weight": "Bolder",
+            "size": "Medium",
+            "color": "Accent",
+        },
+        {
+            "type": "TextBlock",
+            "text": f"Brief: {brief[:120]}{'...' if len(brief) > 120 else ''}",
+            "isSubtle": True,
+            "wrap": True,
+        },
+        {"type": "Separator"},
+    ]
+
+    # Show up to 5 meeting messages
+    for msg in transcript[:5]:
+        avatar = msg.get("avatar", "🤖")
+        title = msg.get("agent_title", "Agent")
+        content = msg.get("content", "")
+        body.append({
+            "type": "TextBlock",
+            "text": f"{avatar} **{title}**: {content[:300]}",
+            "wrap": True,
+        })
+
+    if len(transcript) > 5:
+        body.append({
+            "type": "TextBlock",
+            "text": f"_...and {len(transcript) - 5} more messages. View full transcript in dashboard._",
+            "isSubtle": True,
+            "wrap": True,
+        })
+
+    body.append({"type": "Separator"})
+
+    # Plan summary
+    plan_facts = [
+        {"title": "Agents involved", "value": str(len(plan.get("assigned_agents", {})))},
+        {"title": "Est. time", "value": plan.get("estimated_duration", "~30s")},
+    ]
+    if plan.get("summary"):
+        plan_facts.append({"title": "Plan", "value": plan["summary"][:200]})
+
+    body.append({"type": "FactSet", "facts": plan_facts})
+
+    # Modification input
+    body.append({
+        "type": "Input.Text",
+        "id": "modifications",
+        "placeholder": "Any changes? (e.g., 'Skip SEO', 'Make it more formal')...",
+        "isMultiline": True,
+    })
+
+    actions = [
+        {
+            "type": "Action.Execute",
+            "title": "✅ Continue",
+            "verb": "plan_approve",
+            "data": {"action": "plan_approve"},
+            "style": "positive",
+        },
+        {
+            "type": "Action.Execute",
+            "title": "✏️ Modify",
+            "verb": "plan_modify",
+            "data": {"action": "plan_modify"},
+        },
+        {
+            "type": "Action.Execute",
+            "title": "❌ Cancel",
+            "verb": "plan_cancel",
+            "data": {"action": "plan_cancel"},
+            "style": "destructive",
+        },
+    ]
+    if workflow_id:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "View full plan →",
+            "url": f"{_FRONTEND}/workflows/{workflow_id}",
+        })
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def execution_status_card(
+    agent_title: str,
+    agent_emoji: str,
+    status_text: str,
+    pipeline: List[str],
+    current_step: int,
+    workflow_id: str = "",
+) -> dict:
+    """Card showing which agent is currently active during execution."""
+    total = len(pipeline)
+    progress = f"Step {current_step}/{total}"
+
+    body = [
+        {
+            "type": "TextBlock",
+            "text": f"{agent_emoji} {agent_title} is working...",
+            "weight": "Bolder",
+            "color": "Accent",
+        },
+        {
+            "type": "TextBlock",
+            "text": status_text,
+            "wrap": True,
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "Progress", "value": progress},
+                {"title": "Pipeline", "value": " → ".join(pipeline)},
+            ],
+        },
+    ]
+
+    actions = []
+    if workflow_id:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "View live progress →",
+            "url": f"{_FRONTEND}/workflows/{workflow_id}",
+        })
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def status_summary_card(pending_items: List[dict]) -> dict:
+    """Response to 'what's pending?' — list of items awaiting action."""
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": "📋 Your Pending Items",
+            "weight": "Bolder",
+            "size": "Medium",
+        },
+    ]
+
+    if not pending_items:
+        body.append({
+            "type": "TextBlock",
+            "text": "Nothing pending — you're all caught up! 🎉",
+            "wrap": True,
+        })
+    else:
+        for item in pending_items[:10]:
+            body.append({
+                "type": "TextBlock",
+                "text": f"• **{item.get('type', 'Task')}**: {item.get('brief', '')[:100]}",
+                "wrap": True,
+            })
+
+    actions = [{
+        "type": "Action.OpenUrl",
+        "title": "Open dashboard →",
+        "url": f"{_FRONTEND}/dashboard",
+    }]
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def ingest_status_card(
+    source_name: str,
+    status: str,
+    chunks_created: int = 0,
+    current_step: str = "",
+    progress_pct: int = 0,
+) -> dict:
+    """Card for ingestion status — uses card refresh for pseudo-live updates."""
+    if status == "done":
+        emoji = "✅"
+        text = f"**{source_name}** indexed — {chunks_created} chunks. Ask me about it now."
+    elif status == "error":
+        emoji = "❌"
+        text = f"**{source_name}** failed to index."
+    else:
+        emoji = "⏳"
+        text = f"**{source_name}** — {current_step} ({progress_pct}%)"
+
+    body = [
+        {
+            "type": "TextBlock",
+            "text": f"{emoji} Document Ingestion",
+            "weight": "Bolder",
+            "color": "Accent",
+        },
+        {
+            "type": "TextBlock",
+            "text": text,
+            "wrap": True,
+        },
+    ]
+
+    actions = [{
+        "type": "Action.OpenUrl",
+        "title": "View ingestion details →",
+        "url": f"{_FRONTEND}/ingest",
+    }]
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def daily_digest_card(
+    pending_reviews: int,
+    active_workflows: int,
+    completed_today: int,
+    top_items: List[dict] | None = None,
+) -> dict:
+    """Proactive morning digest card."""
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": "☀️ Good Morning — Your Daily Digest",
+            "weight": "Bolder",
+            "size": "Medium",
+        },
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "Awaiting your review", "value": str(pending_reviews)},
+                {"title": "Active workflows", "value": str(active_workflows)},
+                {"title": "Completed today", "value": str(completed_today)},
+            ],
+        },
+    ]
+
+    if top_items:
+        body.append({"type": "Separator"})
+        for item in top_items[:5]:
+            body.append({
+                "type": "TextBlock",
+                "text": f"• {item.get('brief', '')[:100]}",
+                "wrap": True,
+                "isSubtle": True,
+            })
+
+    actions = [{
+        "type": "Action.OpenUrl",
+        "title": "Open dashboard →",
+        "url": f"{_FRONTEND}/dashboard",
+    }]
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
     }
 
 
@@ -89,11 +432,11 @@ def thinking_card(brief: str) -> dict:
     return {
         "type": "AdaptiveCard",
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-        "version": "1.4",
+        "version": "1.5",
         "body": [
             {
                 "type": "TextBlock",
-                "text": "Drafting copy...",
+                "text": "🤔 Planning your request...",
                 "weight": "Bolder",
                 "color": "Accent",
             },
@@ -112,17 +455,17 @@ def approved_confirmation_card(text: str) -> dict:
     return {
         "type": "AdaptiveCard",
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-        "version": "1.4",
+        "version": "1.5",
         "body": [
             {
                 "type": "TextBlock",
-                "text": "Approved and saved to brand memory.",
+                "text": "✅ Approved and saved to brand memory.",
                 "weight": "Bolder",
                 "color": "Good",
             },
             {
                 "type": "TextBlock",
-                "text": text,
+                "text": text[:2000],
                 "wrap": True,
             },
             {
@@ -132,4 +475,86 @@ def approved_confirmation_card(text: str) -> dict:
                 "wrap": True,
             },
         ],
+    }
+
+
+def prior_work_card(prior_work: list[dict], brief: str) -> dict:
+    """
+    Card showing similar past work — user can reuse, modify, or start fresh.
+    Adaptive Card v1.5-compatible.
+    """
+    body: list[dict] = [
+        {
+            "type": "TextBlock",
+            "text": "🔄 Similar Past Work Found",
+            "weight": "Bolder",
+            "size": "Medium",
+        },
+        {
+            "type": "TextBlock",
+            "text": f"Your brief: \"{brief[:200]}...\"" if len(brief) > 200 else f"Your brief: \"{brief}\"",
+            "wrap": True,
+            "isSubtle": True,
+        },
+    ]
+
+    # Show up to 3 prior work items
+    for i, item in enumerate(prior_work[:3]):
+        score_text = f"Match: {item.get('similarity', 0):.0%}"
+        if item.get("campaign_score", 0) > 0:
+            score_text += f" | Campaign score: {item['campaign_score']:.0f}/100"
+
+        body.append({
+            "type": "Container",
+            "style": "emphasis",
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": f"**#{i+1}** — {item.get('source', 'unknown').replace('_', ' ').title()}",
+                    "weight": "Bolder",
+                },
+                {
+                    "type": "TextBlock",
+                    "text": item.get("brief", item.get("text_preview", ""))[:300],
+                    "wrap": True,
+                },
+                {
+                    "type": "TextBlock",
+                    "text": score_text,
+                    "isSubtle": True,
+                },
+            ],
+        })
+
+    # Action buttons
+    actions = [
+        {
+            "type": "Action.Submit",
+            "title": "✅ Use Similar Approach",
+            "data": {
+                "verb": "recall_reuse",
+                "selected_id": prior_work[0]["id"] if prior_work else "",
+            },
+        },
+        {
+            "type": "Action.Submit",
+            "title": "📝 Modify",
+            "data": {
+                "verb": "recall_modify",
+                "selected_id": prior_work[0]["id"] if prior_work else "",
+            },
+        },
+        {
+            "type": "Action.Submit",
+            "title": "🆕 Start Fresh",
+            "data": {"verb": "recall_fresh"},
+        },
+    ]
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
     }

@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Upload, Link, BookOpen, MessageSquare, CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import clsx from "clsx";
+import IngestProgress from "@/components/IngestProgress";
 
 type Tab = "file" | "url" | "confluence" | "teams_chat";
 type Job = { job_id: string; status: string; source: string };
@@ -160,6 +161,11 @@ export default function IngestPage() {
             <Loader2 size={14} className="animate-spin" /> Processing...
           </div>
         )}
+      </div>
+
+      {/* Live ingestion progress */}
+      <div className="mt-6">
+        <IngestProgress />
       </div>
 
       {/* Recent jobs */}

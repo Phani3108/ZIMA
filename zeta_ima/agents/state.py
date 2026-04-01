@@ -22,7 +22,7 @@ class AgentState(TypedDict):
     active_campaign_id: Optional[str]  # Links session to a long-lived campaign
 
     # Workflow control
-    stage: str                  # "drafting" | "reviewing" | "awaiting_approval" | "done"
+    stage: str                  # "planning" | "drafting" | "reviewing" | "awaiting_approval" | "done"
     approval_decision: Optional[str]   # "approve" | "reject"
     approval_comment: Optional[str]    # Optional human feedback on approval/reject
 
@@ -40,5 +40,18 @@ class AgentState(TypedDict):
     pipeline_index: int         # Current position in the pipeline
     agent_messages: List[dict]  # A2A messages exchanged between agents (AgentMessage dicts)
 
+    # ── Scrum Meeting (Phase 4) ──
+    meeting_transcript: List[dict]          # [{agent_id, agent_title, avatar, content, timestamp}]
+    meeting_plan: dict                      # Structured plan: {tasks, assigned_agents, dependencies}
+    plan_status: str                        # "skipped" | "planning" | "awaiting_user" | "approved" | "modified" | "executing"
+    user_plan_modifications: Optional[str]  # Free-text adjustments from user
+
     # ── Agency Brain context (Genesis v2) ──
     brain_context: List[str]    # Knowledge from the aggregated agency brain
+
+    # ── Proactive Recall (Phase J) ──
+    prior_work: List[dict]      # Past similar briefs/campaigns found by recall_node
+    recall_decision: str        # "reuse" | "modify" | "start_fresh" | "" (user's choice)
+
+    # ── Team Learning (Phase L) ──
+    team_id: str                # Team the user belongs to (resolved from membership)

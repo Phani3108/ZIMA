@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 import redis as redis_lib
-from qdrant_client import QdrantClient
 
 from zeta_ima.config import settings
 
@@ -9,7 +8,7 @@ router = APIRouter()
 
 @router.get("/health")
 async def health() -> dict:
-    """Health check — verifies Redis, Qdrant, and PostgreSQL connections."""
+    """Health check — verifies Redis, vector store, and PostgreSQL connections."""
     status = {"status": "ok", "services": {}}
 
     # Redis
@@ -21,13 +20,14 @@ async def health() -> dict:
         status["services"]["redis"] = f"error: {e}"
         status["status"] = "degraded"
 
-    # Qdrant
+    # Vector store
     try:
-        q = QdrantClient(url=settings.qdrant_url)
-        q.get_collections()
-        status["services"]["qdrant"] = "ok"
+        from zeta_ima.infra.vector_store import get_vector_store
+        vs = get_vector_store()
+        vs.collection_exists("brand_voice")
+        status["services"]["vector_store"] = f"ok ({settings.vector_backend})"
     except Exception as e:
-        status["services"]["qdrant"] = f"error: {e}"
+        status["services"]["vector_store"] = f"error: {e}"
         status["status"] = "degraded"
 
     return status

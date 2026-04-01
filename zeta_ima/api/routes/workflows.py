@@ -361,3 +361,82 @@ Output ONLY the revised content, no explanations."""
         "stage_id": stage_id,
         "message": f"Editing output: '{payload.instruction}'...",
     }
+
+
+# ─── A2A Timeline / Pending / Digest ────────────────────────────────
+
+@router.get("/{workflow_id}/timeline")
+async def get_workflow_timeline(
+    workflow_id: str,
+    user: dict = Depends(get_current_user),
+) -> list[dict]:
+    """Return the A2A agent message timeline for a workflow."""
+    from zeta_ima.orchestrator.a2a import build_execution_timeline
+    from zeta_ima.memory.session import make_thread_config, get_checkpointer
+
+    # Try to read agent_messages from the LangGraph checkpoint
+    config = make_thread_config(workflow_id)
+    try:
+        from zeta_ima.agents.graph import graph
+        state = await graph.aget_state(config)
+        agent_messages = state.values.get("agent_messages", [])
+        return build_execution_timeline(agent_messages)
+    except Exception:
+        return []
+
+
+async def get_pending_items(user_id: str) -> list[dict]:
+    """Get pending items for a user — used by Teams bot and API."""
+    try:
+        wfs = await list_workflows(status="active", created_by=user_id, limit=20)
+        pending = []
+        for wf in wfs:
+            for stage in wf.get("stages", []):
+                if stage.get("status") == "awaiting_review":
+                    pending.append({
+                        "type": "Draft Review",
+                        "brief": wf.get("name", ""),
+                        "workflow_id": wf["id"],
+                        "stage_id": stage["id"],
+                    })
+        return pending
+    except Exception:
+        return []
+
+
+async def get_digest_stats(user_id: str) -> dict:
+    """Get digest statistics for a user."""
+    try:
+        active = await list_workflows(status="active", created_by=user_id, limit=100)
+        completed = await list_workflows(status="completed", created_by=user_id, limit=100)
+        pending_count = sum(
+            1 for wf in active
+            for s in wf.get("stages", [])
+            if s.get("status") == "awaiting_review"
+        )
+        return {
+            "pending_reviews": pending_count,
+            "active_workflows": len(active),
+            "completed_today": len([
+                w for w in completed
+                if str(w.get("updated_at", ""))[:10] == datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            ]),
+        }
+    except Exception:
+        return {"pending_reviews": 0, "active_workflows": 0, "completed_today": 0}
+
+
+@router.get("/pending")
+async def get_pending_endpoint(
+    user: dict = Depends(get_current_user),
+) -> list[dict]:
+    """Get all pending items for the current user."""
+    return await get_pending_items(user["user_id"])
+
+
+@router.get("/digest")
+async def get_digest_endpoint(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Get daily digest stats."""
+    return await get_digest_stats(user["user_id"])
