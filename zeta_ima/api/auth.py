@@ -17,6 +17,7 @@ from typing import Optional
 import jwt
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from zeta_ima.config import settings
 
 security = HTTPBearer(auto_error=False)
 
@@ -24,7 +25,7 @@ security = HTTPBearer(auto_error=False)
 async def verify_teams_token(token: str) -> Optional[dict]:
     """Verify a Teams SSO JWT. Returns user info or None."""
     try:
-        if os.getenv("MODE", "dev") == "prod":
+        if settings.mode == "prod":
             from jwt import PyJWKClient
             jwks = PyJWKClient("https://login.microsoftonline.com/common/discovery/v2.0/keys")
             key = jwks.get_signing_key_from_jwt(token)
@@ -52,7 +53,7 @@ async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
     """FastAPI dependency — returns authenticated user or raises 401."""
-    if os.getenv("MODE", "dev") == "dev":
+    if settings.mode == "dev":
         return {
             "sub": "dev-user",
             "user_id": "dev-user",

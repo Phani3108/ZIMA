@@ -86,7 +86,7 @@ async def bottlenecks(
 @router.get("/quality-trend")
 async def quality_trend(
     days: int = Query(90, le=365),
-    bucket: str = Query("week", regex="^(week|month)$"),
+    bucket: str = Query("week", pattern="^(week|month)$"),
     user: dict = Depends(get_current_user),
 ) -> list[dict]:
     return await analytics_engine.quality_trend(days=days, bucket=bucket)

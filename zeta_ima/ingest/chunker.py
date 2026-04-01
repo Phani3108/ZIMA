@@ -5,9 +5,17 @@ Pattern adapted from RDT 6/ingest/md_chunker.py.
 Each chunk gets metadata for filtering/attribution in Qdrant.
 """
 
+import hashlib
 import uuid
 from dataclasses import dataclass, field
 from typing import List
+
+
+def _content_hash(source_name: str, text: str) -> str:
+    """Deterministic ID from source + content — prevents duplicates on re-ingest."""
+    digest = hashlib.sha256(f"{source_name}::{text}".encode()).hexdigest()[:32]
+    # Convert to UUID format for Qdrant compatibility
+    return str(uuid.UUID(digest))
 
 try:
     import tiktoken
@@ -82,8 +90,10 @@ def chunk_text(
 
 
 def _make_chunk(parts, source_type, source_name, source_url, ingested_at) -> Chunk:
+    text = "\n\n".join(parts)
     return Chunk(
-        text="\n\n".join(parts),
+        text=text,
+        chunk_id=_content_hash(source_name, text),
         source_type=source_type,
         source_name=source_name,
         source_url=source_url,

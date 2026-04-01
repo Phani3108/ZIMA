@@ -17,6 +17,7 @@ Conflict resolution:
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -26,9 +27,17 @@ from qdrant_client import models as qm
 from zeta_ima.config import settings
 from zeta_ima.integrations.vault import vault
 
+log = logging.getLogger(__name__)
+
 BRAIN_COLLECTION = "agency_brain"
 SIMILARITY_OVERRIDE = 0.92   # ≥ this → latest_wins merge
 SIMILARITY_CONFLICT = 0.82   # ≥ this (but < override) → flag_conflict
+
+VALID_CATEGORIES = {
+    "general", "brand_voice", "copy_pattern", "strategy",
+    "audience", "campaign", "tactical", "design", "research",
+}
+VALID_LEVELS = {"zeta", "team", "personal"}
 
 # Role weights for conflict resolution
 ROLE_WEIGHTS: dict[str, float] = {

@@ -189,6 +189,30 @@ async def record_outcome(
         except Exception as e:
             log.warning(f"Failed to store learning vector: {e}")
 
+    # ── Close the loop: record tactical signal from outcome ──
+    try:
+        feedback_parts = []
+        if edit_instructions:
+            feedback_parts.append(f"Edit instructions applied: {'; '.join(edit_instructions[:5])}")
+        if user_feedback:
+            feedback_parts.append(f"User feedback: {user_feedback}")
+        if not approved_first_try:
+            feedback_parts.append(f"Required {iterations_needed} iterations to approve")
+        if feedback_parts:
+            await record_tactical_signal(
+                skill_id=skill_id,
+                feedback=". ".join(feedback_parts),
+                source_user_id="system",
+                outcome={
+                    "workflow_id": workflow_id,
+                    "approved_first_try": approved_first_try,
+                    "iterations_needed": iterations_needed,
+                    "llm_used": llm_used,
+                },
+            )
+    except Exception as e:
+        log.warning(f"Failed to record tactical signal from outcome: {e}")
+
     return outcome_id
 
 
@@ -549,3 +573,121 @@ async def get_directional_signals(
     async with _Session() as session:
         result = await session.execute(q)
         return [dict(row) for row in result.mappings().fetchall()]
+
+
+async def record_rejection(
+    skill_id: str,
+    draft_text: str,
+    rejection_comment: str,
+    edit_instructions: list[str] | None = None,
+    user_id: str = "",
+    workflow_id: str = "",
+    iteration: int = 1,
+) -> str:
+    """
+    Record a rejection as a negative learning signal.
+
+    This closes the feedback loop: rejections create tactical signals so
+    future prompts can preemptively avoid the same mistakes.
+    """
+    feedback_parts = [f"REJECTED (iteration {iteration})"]
+    if rejection_comment:
+        feedback_parts.append(f"User said: {rejection_comment}")
+    if edit_instructions:
+        feedback_parts.append(f"Required fixes: {'; '.join(edit_instructions[:5])}")
+
+    signal_id = await record_tactical_signal(
+        skill_id=skill_id,
+        feedback=". ".join(feedback_parts),
+        source_user_id=user_id,
+        outcome={
+            "workflow_id": workflow_id,
+            "approved_first_try": False,
+            "iterations_needed": iteration,
+            "rejection": True,
+        },
+    )
+    log.info(
+        "Recorded rejection signal %s for skill=%s user=%s",
+        signal_id, skill_id, user_id,
+    )
+    return signal_id
+
+
+async def persist_reflection_insights(
+    skill_id: str,
+    reflection_steps: list[dict],
+    brief: str = "",
+    user_id: str = "system",
+) -> int:
+    """
+    Persist critique patterns from actor-critic reflection into learning memory.
+
+    Each step's improvements become tactical signals so future copies
+    avoid the same mistakes.
+    """
+    persisted = 0
+    for step in reflection_steps:
+        improvements = step.get("improvements", [])
+        critique = step.get("critique", "")
+        score = step.get("score", 0)
+        if not improvements and not critique:
+            continue
+
+        feedback = f"Reflection (score {score:.1f}): {critique}"
+        if improvements:
+            feedback += f" | Improvements needed: {'; '.join(improvements[:5])}"
+
+        await record_tactical_signal(
+            skill_id=skill_id,
+            feedback=feedback,
+            source_user_id=user_id,
+            outcome={"reflection_score": score, "iteration": step.get("iteration", 0)},
+        )
+        persisted += 1
+
+    if persisted:
+        log.info("Persisted %d reflection insights for skill=%s", persisted, skill_id)
+    return persisted
+
+
+async def get_learning_guidance(skill_id: str, brief: str = "", limit: int = 5) -> str:
+    """
+    Build a learning guidance block for injection into copy prompts.
+
+    Combines common edit patterns + past rejection signals + directional signals
+    into a concise instruction block.
+    """
+    parts: list[str] = []
+
+    # 1. Common edit patterns (tactical)
+    edits = await get_common_edits(skill_id, limit=limit)
+    if edits:
+        parts.append("COMMON CORRECTIONS (apply proactively):")
+        for i, edit in enumerate(edits, 1):
+            parts.append(f"  {i}. {edit}")
+
+    # 2. Recent tactical rejection patterns
+    async with _Session() as session:
+        result = await session.execute(
+            select(learning_signals.c.signal_text).where(
+                learning_signals.c.signal_type == "tactical",
+                learning_signals.c.tags.contains([skill_id]),
+            ).order_by(
+                learning_signals.c.created_at.desc(),
+            ).limit(limit)
+        )
+        rejections = [row.signal_text for row in result.fetchall()]
+    if rejections:
+        parts.append("\nRECENT FEEDBACK PATTERNS (avoid these issues):")
+        for i, rej in enumerate(rejections, 1):
+            parts.append(f"  {i}. {rej}")
+
+    # 3. Directional signals at zeta level
+    signals = await get_directional_signals(level="zeta", top_k=3)
+    if signals:
+        parts.append("\nAGENCY DIRECTION:")
+        for sig in signals:
+            parts.append(f"  - {sig.get('signal_text', '')}")
+
+    return "\n".join(parts) if parts else ""

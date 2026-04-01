@@ -120,11 +120,12 @@ class Scheduler:
     async def _tick(self) -> None:
         """Fire all schedules that are due."""
         now = datetime.now(timezone.utc)
+        now_naive = now.replace(tzinfo=None)  # DB stores naive UTC timestamps
         async with _Session() as session:
             result = await session.execute(
                 select(schedules).where(
                     schedules.c.enabled == True,  # noqa: E712
-                    schedules.c.next_run_at <= now,
+                    schedules.c.next_run_at <= now_naive,
                 )
             )
             due = result.fetchall()

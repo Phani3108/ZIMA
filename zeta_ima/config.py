@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # Runtime mode
+    mode: str = "dev"               # "dev" | "prod"
+
     # LLM
     openai_api_key: str = ""
     llm_copy: str = "gpt-4o"

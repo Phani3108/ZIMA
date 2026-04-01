@@ -233,3 +233,83 @@ export const userSkills = {
       body: JSON.stringify({ code }),
     }),
 };
+
+// ─── Schedules ──────────────────────────────────────────────────────
+
+export const schedules = {
+  list: () => fetchJSON("/schedules"),
+  get: (id: string) => fetchJSON(`/schedules/${id}`),
+  create: (body: {
+    name: string;
+    cron_expr: string;
+    template_id: string;
+    variables?: Record<string, any>;
+    campaign_id?: string;
+    max_runs?: number;
+  }) => fetchJSON("/schedules", { method: "POST", body: JSON.stringify(body) }),
+  update: (id: string, body: {
+    name?: string;
+    cron_expr?: string;
+    template_id?: string;
+    variables?: Record<string, any>;
+    enabled?: boolean;
+    max_runs?: number;
+  }) => fetchJSON(`/schedules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: (id: string) => fetchJSON(`/schedules/${id}`, { method: "DELETE" }),
+  toggle: (id: string, enabled: boolean) =>
+    fetchJSON(`/schedules/${id}/toggle`, {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
+};
+
+// ─── Experiments ────────────────────────────────────────────────────
+
+export const experiments = {
+  list: () => fetchJSON("/experiments"),
+  get: (id: string) => fetchJSON(`/experiments/${id}`),
+  create: (body: {
+    name: string;
+    brief: string;
+    variants: Array<{ variant_label: string; llm_used?: string; prompt_variation?: string }>;
+    skill_id?: string;
+    template_id?: string;
+    campaign_id?: string;
+    variables?: Record<string, any>;
+  }) => fetchJSON("/experiments", { method: "POST", body: JSON.stringify(body) }),
+  run: (id: string) => fetchJSON(`/experiments/${id}/run`, { method: "POST" }),
+  score: (id: string, body: { variant_id: string; score: number; feedback?: string }) =>
+    fetchJSON(`/experiments/${id}/score`, { method: "POST", body: JSON.stringify(body) }),
+  conclude: (id: string) =>
+    fetchJSON(`/experiments/${id}/conclude`, { method: "POST" }),
+};
+
+// ─── Costs ──────────────────────────────────────────────────────────
+
+export const costs = {
+  report: (days = 30) => fetchJSON(`/costs/report?days=${days}`),
+  daily: (days = 30) => fetchJSON(`/costs/daily?days=${days}`),
+  limits: () => fetchJSON("/costs/limits"),
+};
+
+// ─── Teams ──────────────────────────────────────────────────────────
+
+export const teams = {
+  list: (mine = false) => fetchJSON(`/teams?mine=${mine}`),
+  get: (id: string) => fetchJSON(`/teams/${id}`),
+  create: (body: { name: string; description?: string }) =>
+    fetchJSON("/teams", { method: "POST", body: JSON.stringify(body) }),
+  update: (id: string, body: { name?: string; description?: string }) =>
+    fetchJSON(`/teams/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: (id: string) => fetchJSON(`/teams/${id}`, { method: "DELETE" }),
+  me: () => fetchJSON("/teams/me"),
+  addMember: (teamId: string, body: { user_id: string; role?: string; display_name?: string; email?: string }) =>
+    fetchJSON(`/teams/${teamId}/members`, { method: "POST", body: JSON.stringify(body) }),
+  removeMember: (teamId: string, userId: string) =>
+    fetchJSON(`/teams/${teamId}/members/${userId}`, { method: "DELETE" }),
+  updateRole: (teamId: string, userId: string, role: string) =>
+    fetchJSON(`/teams/${teamId}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+};

@@ -5,21 +5,28 @@ import { usePathname } from "next/navigation";
 import {
   MessageCircle, Settings, Upload, BarChart2, Zap,
   Sparkles, GitBranch, LayoutDashboard, FolderKanban,
-  Brain, ListTodo,
+  Brain, ListTodo, Code2, CalendarClock, FlaskConical,
+  DollarSign, Users,
 } from "lucide-react";
 import clsx from "clsx";
 import NotificationBell from "@/components/NotificationBell";
 
 const NAV = [
-  { href: "/chat",       label: "Chat",       icon: MessageCircle },
-  { href: "/skills",     label: "Skills",     icon: Sparkles },
-  { href: "/workflows",  label: "Workflows",  icon: GitBranch },
-  { href: "/programs",   label: "Programs",   icon: FolderKanban },
-  { href: "/brain",      label: "Brain",      icon: Brain },
-  { href: "/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/ingest",     label: "Ingest",     icon: Upload },
-  { href: "/analytics",  label: "Analytics",  icon: BarChart2 },
-  { href: "/settings",   label: "Settings",   icon: Settings },
+  { href: "/chat",        label: "Chat",        icon: MessageCircle },
+  { href: "/tasks",       label: "Tasks",       icon: ListTodo },
+  { href: "/skills",      label: "Skills",      icon: Sparkles },
+  { href: "/user-skills", label: "User Skills", icon: Code2 },
+  { href: "/workflows",   label: "Workflows",   icon: GitBranch },
+  { href: "/programs",    label: "Programs",    icon: FolderKanban },
+  { href: "/experiments", label: "Experiments", icon: FlaskConical },
+  { href: "/schedules",   label: "Schedules",   icon: CalendarClock },
+  { href: "/brain",       label: "Brain",       icon: Brain },
+  { href: "/dashboard",   label: "Dashboard",   icon: LayoutDashboard },
+  { href: "/costs",       label: "Costs",       icon: DollarSign },
+  { href: "/teams",       label: "Teams",       icon: Users },
+  { href: "/ingest",      label: "Ingest",      icon: Upload },
+  { href: "/analytics",   label: "Analytics",   icon: BarChart2 },
+  { href: "/settings",    label: "Settings",    icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -50,7 +57,7 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
-      <div className="text-xs text-gray-300 px-2">v0.5.0</div>
+      <div className="text-xs text-gray-300 px-2">v0.6.0</div>
     </aside>
   );
 }

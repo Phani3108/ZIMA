@@ -2,9 +2,12 @@
 Review Agent node — Actor-Critic quality gate (Genesis v2).
 
 Flow:
-  1. Actor-Critic ReflectionLoop polishes the draft (up to 3 iterations, threshold 7.5).
-  2. Final cheap scorer (gpt-4o-mini) assigns rubric scores + PASS/FAIL.
-  3. PASS → await_approval; FAIL (after max revisions) → still forward to human.
+  1. Read A2A handoff from copy/design agents for context
+  2. Actor-Critic ReflectionLoop polishes the draft (up to 3 iterations, threshold 7.5).
+  3. Final cheap scorer (gpt-4o-mini) assigns rubric scores + PASS/FAIL.
+  4. Persist reflection insights to learning memory (closes the loop).
+  5. Emit A2A feedback message for downstream agents.
+  6. PASS → await_approval; FAIL (after max revisions) → still forward to human.
 
 Scoring rubric (0–10 each):
   - brand_fit:    Does it match the tone/voice in the brand examples?
@@ -12,6 +15,7 @@ Scoring rubric (0–10 each):
   - cta_strength: Is the call-to-action compelling and specific?
 """
 
+import logging
 import re
 from pathlib import Path
 
@@ -20,6 +24,9 @@ from openai import AsyncOpenAI
 from zeta_ima.agents.state import AgentState
 from zeta_ima.agents.reflection import make_reflection_loop
 from zeta_ima.config import settings
+from zeta_ima.orchestrator.a2a import AgentMessage, get_latest_handoff
+
+log = logging.getLogger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "review_agent.md"
 MAX_AUTO_REVISIONS = 2  # After this many FAIL loops, force it to await_approval anyway
@@ -43,11 +50,18 @@ def _parse_review(raw: str) -> dict:
 
 
 async def review_node(state: AgentState) -> dict:
-    """Actor-Critic reflection pass, then final scoring."""
+    """Actor-Critic reflection pass, then final scoring, then persist insights."""
     brand_sample = "\n".join(state.get("brand_examples", [])[:2]) or "No examples available."
     brief = state["current_brief"]
     draft_text = state["current_draft"]["text"]
     iteration = state.get("iteration_count", 0)
+    agent_messages = list(state.get("agent_messages", []))
+
+    # ── Read A2A review criteria from PM ────────────────────────────────────
+    extra_criteria = ""
+    handoff = get_latest_handoff(agent_messages, "review")
+    if handoff and handoff.handoff_instructions:
+        extra_criteria = f"\n\nPM Review Criteria: {handoff.handoff_instructions}"
 
     # ── Phase 1: Actor-Critic Reflection ────────────────────────────────────
     reflection_result = None
@@ -72,7 +86,8 @@ async def review_node(state: AgentState) -> dict:
         f"Brief: {brief}\n\n"
         f"Draft:\n{polished_draft}\n\n"
         f"Brand examples used:\n{brand_sample}\n\n"
-        "Score each dimension (0-10):\n"
+        + extra_criteria +
+        "\nScore each dimension (0-10):\n"
         "  brand_fit: <score>\n"
         "  clarity: <score>\n"
         "  cta_strength: <score>\n"
@@ -101,11 +116,51 @@ async def review_node(state: AgentState) -> dict:
             "converged": reflection_result.converged,
             "final_score": reflection_result.final_score,
         }
+        # Serialize reflection steps for persistence in memory_node
+        review["_reflection_steps"] = [
+            {
+                "iteration": s.iteration,
+                "critique": s.critique,
+                "score": s.score,
+                "passed": s.passed,
+                "improvements": s.improvements,
+            }
+            for s in reflection_result.steps
+        ]
+
+    # ── Phase 3: Persist reflection insights immediately ─────────────────────
+    if reflection_result and reflection_result.steps:
+        try:
+            from zeta_ima.memory.learning import persist_reflection_insights
+            await persist_reflection_insights(
+                skill_id=state.get("intent", "copy"),
+                reflection_steps=review.get("_reflection_steps", []),
+                brief=brief,
+                user_id=state.get("user_id", "system"),
+            )
+        except Exception as e:
+            log.debug("Reflection persistence failed: %s", e)
+
+    # ── Phase 4: Emit A2A feedback message ───────────────────────────────────
+    agent_messages.append(AgentMessage(
+        from_agent="review",
+        to_agent="approval",
+        message_type="feedback",
+        payload={
+            "scores": review.get("scores", {}),
+            "passed": review.get("passed", False),
+            "reason": review.get("reason", ""),
+        },
+        context_summary=(
+            f"Review {'PASS' if review['passed'] else 'FAIL'}: {review.get('reason', '')}"
+        ),
+    ).to_dict())
 
     return {
         "review_result": review,
         "stage": next_stage,
         "current_draft": {**state["current_draft"], "text": polished_draft},
+        "agent_messages": agent_messages,
         "messages": [
             {
                 "role": "assistant",
