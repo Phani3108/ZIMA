@@ -1,0 +1,69 @@
+# Core framework
+fastapi>=0.111.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+
+# LangGraph + checkpointer
+langgraph>=0.2.0
+langchain-openai>=0.1.0
+langgraph-checkpoint-redis>=0.1.0
+
+# OpenAI
+openai>=1.3.7
+
+# Qdrant (brand memory)
+qdrant-client>=1.7.0
+
+# PostgreSQL (campaigns, audit)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+alembic>=1.13.0
+
+# Redis (session state)
+redis>=5.0.1
+
+# Teams Bot Framework
+botbuilder-core>=4.15.0
+botbuilder-schema>=4.15.0
+botbuilder-integration-aiohttp>=4.15.0
+
+# Utilities
+python-dotenv>=1.0.0
+httpx>=0.25.2
+tenacity>=8.2.3
+loguru>=0.7.2
+
+# Document ingestion
+pymupdf>=1.23.0           # PDF extraction
+python-docx>=1.1.0        # Word (.docx) extraction
+beautifulsoup4>=4.12.0    # URL scraping
+lxml>=5.0.0
+tiktoken>=0.6.0           # Token counting for chunking
+
+# Encryption (API key vault)
+cryptography>=42.0.0      # Fernet symmetric encryption
+
+# Azure (Key Vault + Graph API proactive messaging)
+azure-keyvault-secrets>=4.7.0
+azure-identity>=1.15.0
+msal>=1.26.0
+
+# Auth
+PyJWT>=2.8.0
+
+# Async PostgreSQL driver (for SQLAlchemy async)
+asyncpg>=0.29.0
+
+# Genesis v2 additions
+pyyaml>=6.0                   # Orchestrator pipeline YAML
+RestrictedPython>=7.4          # Codable skills sandbox
+Pillow>=10.0                   # Image processing (base64 encode/decode helpers)
+google-genai>=0.7.0            # Nano Banana 2 (gemini-3.1-flash-image-preview)
+
+# Phase 3 additions
+croniter>=2.0.0                # Cron expression parser for scheduler
+
+# Dev / test
+pytest>=7.4.3
+pytest-asyncio>=0.23.0

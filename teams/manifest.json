@@ -1,0 +1,118 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "${{MICROSOFT_APP_ID}}",
+  "packageName": "com.zetaima.app",
+  "developer": {
+    "name": "Zeta AI Marketing Agency",
+    "websiteUrl": "https://${{YOUR_DOMAIN}}",
+    "privacyUrl": "https://${{YOUR_DOMAIN}}/privacy",
+    "termsOfUseUrl": "https://${{YOUR_DOMAIN}}/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Zeta IMA",
+    "full": "Zeta AI Marketing Agency"
+  },
+  "description": {
+    "short": "AI-powered marketing copy and campaign orchestration.",
+    "full": "Zeta IMA is your AI marketing team. Draft copy, manage campaigns, search knowledge, and orchestrate Jira, Confluence, GitHub, and Canva — all from Teams or the web app."
+  },
+  "accentColor": "#0078d4",
+  "bots": [
+    {
+      "botId": "${{MICROSOFT_APP_ID}}",
+      "scopes": ["personal", "team", "groupchat"],
+      "supportsFiles": true,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupchat"],
+          "commands": [
+            {
+              "title": "new campaign",
+              "description": "Start a new marketing campaign"
+            },
+            {
+              "title": "write",
+              "description": "Draft copy for a channel (e.g. write a LinkedIn post about...)"
+            },
+            {
+              "title": "ingest",
+              "description": "Ingest a document or URL into the knowledge base"
+            },
+            {
+              "title": "research",
+              "description": "Search the knowledge base (e.g. research brand voice for Series A)"
+            },
+            {
+              "title": "jira",
+              "description": "Create or look up a Jira ticket"
+            },
+            {
+              "title": "confluence",
+              "description": "Publish or search Confluence pages"
+            },
+            {
+              "title": "status",
+              "description": "Show the current draft status for this session"
+            },
+            {
+              "title": "help",
+              "description": "Show all available commands"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "staticTabs": [
+    {
+      "entityId": "zeta-chat",
+      "name": "Chat",
+      "contentUrl": "https://${{YOUR_DOMAIN}}/chat",
+      "websiteUrl": "https://${{YOUR_DOMAIN}}/chat",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "zeta-analytics",
+      "name": "Analytics",
+      "contentUrl": "https://${{YOUR_DOMAIN}}/analytics",
+      "websiteUrl": "https://${{YOUR_DOMAIN}}/analytics",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "zeta-ingest",
+      "name": "Knowledge Base",
+      "contentUrl": "https://${{YOUR_DOMAIN}}/ingest",
+      "websiteUrl": "https://${{YOUR_DOMAIN}}/ingest",
+      "scopes": ["personal"]
+    },
+    {
+      "entityId": "zeta-settings",
+      "name": "Settings",
+      "contentUrl": "https://${{YOUR_DOMAIN}}/settings",
+      "websiteUrl": "https://${{YOUR_DOMAIN}}/settings",
+      "scopes": ["personal"]
+    }
+  ],
+  "configurableTabs": [
+    {
+      "configurationUrl": "https://${{YOUR_DOMAIN}}/teams-tab-config",
+      "canUpdateConfiguration": true,
+      "scopes": ["team"]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": [
+    "${{YOUR_DOMAIN}}"
+  ],
+  "webApplicationInfo": {
+    "id": "${{MICROSOFT_APP_ID}}",
+    "resource": "api://${{YOUR_DOMAIN}}/${{MICROSOFT_APP_ID}}"
+  }
+}

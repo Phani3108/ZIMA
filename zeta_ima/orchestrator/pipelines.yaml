@@ -1,0 +1,55 @@
+# Orchestrator pipeline definitions.
+# Static config for known routing patterns — checked BEFORE LLM classification.
+# Pipelines are ordered lists of agent nodes to execute.
+
+pipelines:
+  full_campaign:
+    description: "End-to-end campaign: research → PM decomposition → copy → design → review → approval"
+    agents: [research, pm, copy, design, review, approval]
+    keywords: [campaign, full campaign, end-to-end, launch, product launch]
+    priority: high
+
+  quick_copy:
+    description: "Fast copy generation: research → copy → review → approval"
+    agents: [research, copy, review, approval]
+    keywords: [write, draft, post, email, headline, copy, content, blog, article, newsletter]
+    priority: medium
+
+  design_only:
+    description: "Image/visual generation: research → design → review → approval"
+    agents: [research, design, review, approval]
+    keywords: [design, image, visual, banner, graphic, illustration, poster, ad creative]
+    priority: medium
+
+  copy_and_design:
+    description: "Copy + design together: research → PM → copy → design → review → approval"
+    agents: [research, pm, copy, design, review, approval]
+    keywords: [copy and design, write and design, content with visuals, social media post with image]
+    priority: high
+
+  research_report:
+    description: "Research only: gather information and summarize"
+    agents: [research, tool_done]
+    keywords: [research, find, search, what does, tell me about, summarise, look up, analyze]
+    priority: low
+
+  jira_task:
+    description: "Create a Jira ticket"
+    agents: [research, jira, tool_done]
+    keywords: [ticket, jira, task, issue, bug, sprint]
+    priority: low
+
+  confluence_publish:
+    description: "Publish to Confluence"
+    agents: [research, confluence, tool_done]
+    keywords: [confluence, wiki, publish page, document]
+    priority: low
+
+# Default pipeline when no match is found (LLM classification or fallback)
+default_pipeline: quick_copy
+
+# Priority levels mapping
+priorities:
+  high: 3
+  medium: 2
+  low: 1
