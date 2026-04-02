@@ -1,9 +1,43 @@
 /**
  * API client for Zeta IMA backend.
  * All calls go through Next.js rewrite proxy (/api/* → backend).
+ *
+ * Errors are parsed from structured JSON responses and thrown as ApiError.
+ * Frontend components can catch these and show user-friendly messages.
  */
 
 const BASE = "/api";
+
+/** Structured error from the backend */
+export class ApiError extends Error {
+  status: number;
+  detail: string;
+  type: string;
+  service?: string;
+
+  constructor(status: number, body: { error?: string; detail?: string; type?: string; service?: string }) {
+    const msg = body.error || body.detail || `HTTP ${status}`;
+    super(msg);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = body.detail || msg;
+    this.type = body.type || "unknown";
+    this.service = body.service;
+  }
+
+  /** User-friendly description for toast display */
+  get userMessage(): string {
+    if (this.type === "connection_error")
+      return `${this.service || "A service"} is not reachable. Check Settings → Infrastructure.`;
+    if (this.type === "auth_error")
+      return "Session expired. Please refresh the page.";
+    if (this.type === "vault_error")
+      return "Credential vault error. Re-enter API keys in Settings → Integrations.";
+    if (this.type === "integration_error")
+      return `External API call failed. Check the integration in Settings.`;
+    return this.detail;
+  }
+}
 
 async function fetchJSON<T = any>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -11,8 +45,13 @@ async function fetchJSON<T = any>(path: string, init?: RequestInit): Promise<T> 
     ...init,
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API ${res.status}: ${body}`);
+    let body: any;
+    try {
+      body = await res.json();
+    } catch {
+      body = { error: await res.text() };
+    }
+    throw new ApiError(res.status, body);
   }
   return res.json();
 }

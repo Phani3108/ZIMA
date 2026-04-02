@@ -11,8 +11,12 @@ Startup sequence:
 Pattern reused from RDT 6/orchestrator/app.py.
 """
 
-from fastapi import FastAPI
+import logging
+import traceback
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from zeta_ima.api.routes.activity import router as activity_router
 from zeta_ima.api.routes.analytics import router as analytics_router
@@ -51,9 +55,11 @@ from zeta_ima.config import settings as cfg
 
 
 def create_app() -> FastAPI:
+    _log = logging.getLogger(__name__)
+
     app = FastAPI(
         title="Zeta IMA — AI Marketing Agency",
-        version="0.4.0",
+        version="0.7.0",
         docs_url="/docs",
     )
 
@@ -64,6 +70,61 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         allow_credentials=True,
     )
+
+    # ── Global exception handler — structured errors for the frontend ──
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        _log.error(f"Unhandled error on {request.method} {request.url.path}: {exc}", exc_info=True)
+        # Map known exception types to user-friendly messages
+        error_type = type(exc).__name__
+        detail = str(exc)
+
+        # Connection errors
+        if "Connection refused" in detail or "ConnectionRefusedError" in error_type:
+            service = "unknown service"
+            if "5432" in detail or "5433" in detail or "asyncpg" in detail.lower():
+                service = "PostgreSQL"
+            elif "6379" in detail:
+                service = "Redis"
+            elif "6333" in detail:
+                service = "Qdrant"
+            return JSONResponse(status_code=503, content={
+                "error": f"Cannot connect to {service}",
+                "detail": f"{service} is not reachable. Check that the service is running and the connection URL is correct.",
+                "service": service,
+                "type": "connection_error",
+            })
+
+        # Auth errors
+        if "401" in detail or "Unauthorized" in detail or "authentication" in detail.lower():
+            return JSONResponse(status_code=401, content={
+                "error": "Authentication failed",
+                "detail": "Your session may have expired. Please refresh and try again.",
+                "type": "auth_error",
+            })
+
+        # Vault / credential errors
+        if "Fernet" in detail or "vault" in detail.lower() or "decrypt" in detail.lower():
+            return JSONResponse(status_code=500, content={
+                "error": "Credential vault error",
+                "detail": "The encryption key may have changed. Re-enter your API keys in Settings → Integrations.",
+                "type": "vault_error",
+            })
+
+        # Integration API errors
+        if "httpx" in error_type.lower() or "timeout" in detail.lower():
+            return JSONResponse(status_code=502, content={
+                "error": "External service error",
+                "detail": f"An external API call failed: {detail[:200]}",
+                "type": "integration_error",
+            })
+
+        # Default
+        return JSONResponse(status_code=500, content={
+            "error": "Internal server error",
+            "detail": f"{error_type}: {detail[:300]}",
+            "type": "server_error",
+        })
 
     @app.on_event("startup")
     async def startup():
