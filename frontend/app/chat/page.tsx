@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2, CheckCircle, XCircle } from "lucide-react";
 import clsx from "clsx";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Message =
   | { role: "user"; content: string }
@@ -13,6 +15,7 @@ const API_WS = process.env.NEXT_PUBLIC_API_URL?.replace("http", "ws") || "ws://l
 const SESSION_ID = typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36).slice(2);
 
 export default function ChatPage() {
+  const { online, checking } = useBackend();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,6 +24,7 @@ export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!online) return;
     const ws = new WebSocket(`${API_WS}/ws/chat/${SESSION_ID}`);
     wsRef.current = ws;
 
@@ -45,7 +49,10 @@ export default function ChatPage() {
     };
 
     return () => ws.close();
-  }, []);
+  }, [online]);
+
+  if (checking) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-gray-400" size={24} /></div>;
+  if (!online) return <div className="max-w-3xl mx-auto px-4 py-6"><h1 className="text-xl font-semibold text-gray-800 mb-4">Zeta Chat</h1><OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Chat connects to a real-time WebSocket for AI agent conversations. Deploy the backend to start chatting with your marketing team.</p></OfflineBanner></div>;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

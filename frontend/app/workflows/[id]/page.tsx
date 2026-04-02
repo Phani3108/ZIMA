@@ -10,6 +10,8 @@ import {
 import clsx from "clsx";
 import { workflows } from "@/lib/api";
 import AgentTimeline from "@/components/AgentTimeline";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Stage = {
   id: string;
@@ -61,6 +63,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function WorkflowDetailPage() {
   const params = useParams();
   const workflowId = params.id as string;
+  const { online, checking } = useBackend();
 
   const [wf, setWf] = useState<WorkflowDetail | null>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -71,16 +74,24 @@ export default function WorkflowDetailPage() {
   const [msg, setMsg] = useState("");
 
   const load = useCallback(() => {
+    if (!online) return;
     workflows.get(workflowId).then(setWf);
     workflows.timeline(workflowId).then(setTimeline).catch(() => {});
-  }, [workflowId]);
+  }, [workflowId, online]);
 
   useEffect(() => {
+    if (!online) return;
     load();
-    // Poll every 5 seconds for active workflows
     const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
-  }, [load]);
+  }, [load, online]);
+
+  if (!online && !checking) return (
+    <div className="max-w-4xl mx-auto px-6 py-8">
+      <Link href="/workflows" className="flex items-center gap-1 text-sm text-gray-500 hover:text-brand mb-6"><ArrowLeft size={14} /> Back to Workflows</Link>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Workflow details require a running backend. Deploy the API server to view stages, approve content, and track progress.</p></OfflineBanner>
+    </div>
+  );
 
   const handleApprove = async (stageId: string) => {
     setActing(true);

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { experiments } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Variant = {
   variant_id: string;
@@ -39,6 +41,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ExperimentsPage() {
+  const { online, checking } = useBackend();
   const [items, setItems] = useState<Experiment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Experiment | null>(null);
@@ -50,11 +53,19 @@ export default function ExperimentsPage() {
   });
 
   const load = useCallback(() => {
+    if (!online) { setLoading(false); return; }
     setLoading(true);
     experiments.list().then(setItems).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [online]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><FlaskConical size={22} /> A/B Experiments</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Run A/B tests across LLM models, prompts, and content variants. Deploy the backend to create experiments.</p></OfflineBanner>
+    </div>
+  );
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.brief.trim()) return;

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { tasks } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Task = {
   id: string;
@@ -36,6 +38,7 @@ const PRIORITY_ICONS: Record<number, { icon: any; label: string; color: string }
 };
 
 export default function TasksPage() {
+  const { online, checking } = useBackend();
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string | null>(null);
@@ -44,11 +47,19 @@ export default function TasksPage() {
   const [form, setForm] = useState({ title: "", description: "", priority: 2 });
 
   const load = useCallback(() => {
+    if (!online) { setLoading(false); return; }
     setLoading(true);
     tasks.list(filter ?? undefined).then(setAllTasks).catch(() => {}).finally(() => setLoading(false));
-  }, [filter]);
+  }, [filter, online]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><ListTodo size={22} /> Task Queue</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">The orchestrator task pipeline manages, routes, and tracks all marketing tasks. Deploy the backend to create and manage tasks.</p></OfflineBanner>
+    </div>
+  );
 
   const handleCreate = async () => {
     if (!form.title.trim()) return;

@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { workflows } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Stage = {
   id: string;
@@ -44,6 +46,7 @@ const STAGE_COLORS: Record<string, string> = {
 };
 
 export default function WorkflowsPage() {
+  const { online, checking } = useBackend();
   const [allWorkflows, setAllWorkflows] = useState<Workflow[]>([]);
   const [filter, setFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,9 +54,10 @@ export default function WorkflowsPage() {
   const [templates, setTemplates] = useState<any[]>([]);
 
   useEffect(() => {
+    if (!online) { setLoading(false); return; }
     loadWorkflows();
     workflows.templates().then(setTemplates).catch(() => {});
-  }, []);
+  }, [online]);
 
   const loadWorkflows = () => {
     setLoading(true);
@@ -63,7 +67,14 @@ export default function WorkflowsPage() {
     }).catch(() => setLoading(false));
   };
 
-  useEffect(() => { loadWorkflows(); }, [filter]);
+  useEffect(() => { if (online) loadWorkflows(); }, [filter, online]);
+
+  if (!online && !checking) return (
+    <div className="max-w-7xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 mb-4">Workflows</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Multi-stage marketing workflows with agent orchestration and approval gates. Deploy the backend to create and manage workflows.</p></OfflineBanner>
+    </div>
+  );
 
   const filtered = allWorkflows;
 

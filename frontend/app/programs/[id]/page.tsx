@@ -5,9 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Play, CheckCircle2, Clock, AlertTriangle,
-  Loader2, ChevronRight, Target,
+  Loader2, ChevronRight, Target, WifiOff,
 } from "lucide-react";
 import clsx from "clsx";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type ProgramDetail = {
   id: string;
@@ -33,12 +34,13 @@ export default function ProgramDetailPage() {
   const programId = params.id as string;
   const [program, setProgram] = useState<ProgramDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backendOnline, setBackendOnline] = useState(true);
 
   const load = () => {
     fetch(`/api/programs/${programId}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then((data) => { setProgram(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch(() => { setBackendOnline(false); setLoading(false); });
   };
 
   useEffect(() => { load(); }, [programId]);
@@ -48,10 +50,21 @@ export default function ProgramDetailPage() {
     setTimeout(load, 2000);
   };
 
-  if (loading || !program) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="animate-spin text-gray-400" size={24} />
+      </div>
+    );
+  }
+
+  if (!backendOnline || !program) {
+    return (
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <Link href="/programs" className="flex items-center gap-1 text-sm text-gray-500 hover:text-brand mb-4">
+          <ArrowLeft size={14} /> Back to Programs
+        </Link>
+        <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Program details require a running backend. Deploy the API server to view and manage program workflows.</p></OfflineBanner>
       </div>
     );
   }

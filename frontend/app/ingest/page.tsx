@@ -4,11 +4,14 @@ import { useState, useRef } from "react";
 import { Upload, Link, BookOpen, MessageSquare, CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import clsx from "clsx";
 import IngestProgress from "@/components/IngestProgress";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Tab = "file" | "url" | "confluence" | "teams_chat";
 type Job = { job_id: string; status: string; source: string };
 
 export default function IngestPage() {
+  const { online, checking } = useBackend();
   const [tab, setTab] = useState<Tab>("file");
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,6 +75,18 @@ export default function IngestPage() {
       <p className="text-sm text-gray-500 mb-6">
         Ingest brand guidelines, process docs, URLs, or past conversations. Agents use this as grounding context.
       </p>
+
+      {!online && !checking && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 mb-6 flex items-start gap-3">
+          <AlertCircle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800">Backend Offline</h3>
+            <p className="text-xs text-amber-700 mt-0.5">
+              File uploads and URL ingestion require a running backend. Deploy the API server to ingest documents.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b mb-6">

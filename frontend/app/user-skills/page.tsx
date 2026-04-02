@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Code2, Plus, Play, Trash2, RefreshCw, Loader2, CheckCircle2, XCircle, Share2 } from "lucide-react";
 import clsx from "clsx";
 import { userSkills } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Skill = {
   id: string;
@@ -19,6 +21,7 @@ type Skill = {
 type ExecResult = { output: any; error: string | null; elapsed_ms: number } | null;
 
 export default function UserSkillsPage() {
+  const { online, checking } = useBackend();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Skill | null>(null);
@@ -31,11 +34,19 @@ export default function UserSkillsPage() {
   const [form, setForm] = useState({ name: "", description: "", code: "", is_shared: false, tags: "" });
 
   const load = useCallback(() => {
+    if (!online) { setLoading(false); return; }
     setLoading(true);
     userSkills.list().then(setSkills).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [online]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><Code2 size={22} /> User Skills</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Write custom Python skill scripts that agents can invoke during workflows. Deploy the backend to create and run user skills.</p></OfflineBanner>
+    </div>
+  );
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.code.trim()) return;

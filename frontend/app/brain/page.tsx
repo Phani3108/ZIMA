@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { Brain, Search, Plus, ChevronDown, ChevronUp, AlertTriangle, Zap, RefreshCw } from "lucide-react";
 import { brain, distill } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -110,6 +112,7 @@ function KnowledgeCard({ entry, onResolve }: {
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function BrainPage() {
+  const { online, checking } = useBackend();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<BrainEntry[]>([]);
   const [conflicts, setConflicts] = useState<BrainEntry[]>([]);
@@ -126,8 +129,15 @@ export default function BrainPage() {
 
   // Load conflicts on mount
   useEffect(() => {
-    brain.conflicts().then(setConflicts).catch(() => {});
-  }, []);
+    if (online) brain.conflicts().then(setConflicts).catch(() => {});
+  }, [online]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><Brain size={22} /> Agency Brain</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">The Agency Brain is the aggregated knowledge base from all campaigns, brand guidelines, and agent learning. Deploy the backend to search, contribute, and resolve conflicts.</p></OfflineBanner>
+    </div>
+  );
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;

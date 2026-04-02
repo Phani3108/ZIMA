@@ -5,10 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Play, ChevronDown, ChevronUp, Loader2,
-  CheckCircle, ExternalLink,
+  CheckCircle, ExternalLink, WifiOff,
 } from "lucide-react";
 import clsx from "clsx";
 import { skills } from "@/lib/api";
+import { getStaticSkill, type StaticSkill } from "@/lib/staticSkills";
 
 type Prompt = {
   id: string;
@@ -47,16 +48,30 @@ export default function SkillDetailPage() {
   const [executing, setExecuting] = useState(false);
   const [result, setResult] = useState<{ workflow_id: string; message: string } | null>(null);
   const [error, setError] = useState("");
+  const [backendOnline, setBackendOnline] = useState(true);
 
   useEffect(() => {
     skills.get(skillId).then((data) => {
       setSkill(data);
       if (data.prompts.length > 0) {
         setSelectedPrompt(data.prompts[0]);
-        // Initialize variables
         const vars: Record<string, string> = {};
         data.prompts[0].variables.forEach((v: string) => (vars[v] = ""));
         setVariables(vars);
+      }
+    }).catch(() => {
+      // Fallback to static catalog
+      setBackendOnline(false);
+      const staticSkill = getStaticSkill(skillId);
+      if (staticSkill) {
+        const mapped: SkillDetail = { ...staticSkill, prompts: staticSkill.prompts };
+        setSkill(mapped);
+        if (mapped.prompts.length > 0) {
+          setSelectedPrompt(mapped.prompts[0]);
+          const vars: Record<string, string> = {};
+          mapped.prompts[0].variables.forEach((v) => (vars[v] = ""));
+          setVariables(vars);
+        }
       }
     });
   }, [skillId]);
@@ -98,8 +113,13 @@ export default function SkillDetailPage() {
 
   if (!skill) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="animate-spin text-gray-400" size={24} />
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        <Link href="/skills" className="flex items-center gap-1 text-sm text-gray-500 hover:text-brand mb-6">
+          <ArrowLeft size={14} /> Back to Skills
+        </Link>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="animate-spin text-gray-400" size={24} />
+        </div>
       </div>
     );
   }
@@ -110,6 +130,18 @@ export default function SkillDetailPage() {
       <Link href="/skills" className="flex items-center gap-1 text-sm text-gray-500 hover:text-brand mb-6">
         <ArrowLeft size={14} /> Back to Skills
       </Link>
+
+      {!backendOnline && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 mb-6 flex items-start gap-3">
+          <WifiOff size={18} className="text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800">Preview Mode</h3>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Showing skill details from the built-in catalog. Connect a backend to execute workflows.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -256,10 +288,14 @@ export default function SkillDetailPage() {
               {/* Execute button */}
               <button
                 onClick={execute}
-                disabled={executing}
+                disabled={executing || !backendOnline}
                 className="w-full flex items-center justify-center gap-2 bg-brand hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-50 transition-colors"
               >
-                {executing ? (
+                {!backendOnline ? (
+                  <>
+                    <WifiOff size={14} /> Backend Required
+                  </>
+                ) : executing ? (
                   <>
                     <Loader2 size={14} className="animate-spin" /> Executing...
                   </>

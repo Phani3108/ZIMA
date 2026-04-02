@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { teams } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Member = {
   user_id: string;
@@ -41,6 +43,7 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function TeamsPage() {
+  const { online, checking } = useBackend();
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Team | null>(null);
@@ -51,11 +54,19 @@ export default function TeamsPage() {
   const [showAddMember, setShowAddMember] = useState(false);
 
   const load = useCallback(() => {
+    if (!online) { setLoading(false); return; }
     setLoading(true);
     teams.list().then(setAllTeams).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [online]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><Users size={22} /> Teams</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Create and manage marketing teams with role-based members. Deploy the backend to organize your teams.</p></OfflineBanner>
+    </div>
+  );
 
   const selectTeam = async (id: string) => {
     try {

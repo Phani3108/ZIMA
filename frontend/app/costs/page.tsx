@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { DollarSign, RefreshCw, Loader2, TrendingUp, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
 import { costs } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Report = {
   total_cost: number;
@@ -28,6 +30,7 @@ type Limits = {
 };
 
 export default function CostsPage() {
+  const { online, checking } = useBackend();
   const [report, setReport] = useState<Report | null>(null);
   const [daily, setDaily] = useState<DailyEntry[]>([]);
   const [limits, setLimits] = useState<Limits | null>(null);
@@ -35,14 +38,22 @@ export default function CostsPage() {
   const [days, setDays] = useState(30);
 
   const load = useCallback(() => {
+    if (!online) { setLoading(false); return; }
     setLoading(true);
     Promise.all([costs.report(days), costs.daily(days), costs.limits()])
       .then(([r, d, l]) => { setReport(r); setDaily(d); setLimits(l); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [days]);
+  }, [days, online]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><DollarSign size={22} /> Cost Tracker</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Tracks LLM spending, token usage, and rate limits across all agents. Deploy the backend to see cost data.</p></OfflineBanner>
+    </div>
+  );
 
   const maxCost = Math.max(...daily.map(d => d.cost), 0.01);
 

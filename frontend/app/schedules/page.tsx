@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { schedules, workflows } from "@/lib/api";
+import { useBackend } from "@/lib/useBackend";
+import OfflineBanner from "@/components/OfflineBanner";
 
 type Schedule = {
   id: string;
@@ -25,6 +27,7 @@ type Schedule = {
 type Template = { id: string; name: string; description: string };
 
 export default function SchedulesPage() {
+  const { online, checking } = useBackend();
   const [items, setItems] = useState<Schedule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,14 +36,22 @@ export default function SchedulesPage() {
   const [form, setForm] = useState({ name: "", cron_expr: "0 9 * * 1", template_id: "", max_runs: 0 });
 
   const load = useCallback(() => {
+    if (!online) { setLoading(false); return; }
     setLoading(true);
     Promise.all([schedules.list(), workflows.templates()])
       .then(([s, t]) => { setItems(s); setTemplates(t); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [online]);
 
   useEffect(() => { load(); }, [load]);
+
+  if (!online && !checking) return (
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><CalendarClock size={22} /> Schedules</h1>
+      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Automate recurring workflows with cron-based schedules. Deploy the backend to configure scheduled triggers.</p></OfflineBanner>
+    </div>
+  );
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.cron_expr.trim() || !form.template_id) return;
