@@ -43,7 +43,7 @@ type CategoryMeta = { label: string; icon: string; order: number };
 
 /* ─── Icon helper ───────────────────────────────────────────────── */
 
-const CATEGORY_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ size?: number | string; className?: string }>> = {
   brain: Brain, palette: Palette, share2: Share2, mail: Mail,
   search: Search, gitBranch: GitBranch, users: Users, barChart: BarChart,
 };
