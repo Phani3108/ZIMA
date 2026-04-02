@@ -355,3 +355,95 @@ export const teams = {
       body: JSON.stringify({ role }),
     }),
 };
+
+// ─── Artifacts ──────────────────────────────────────────────────────
+
+export const artifacts = {
+  list: (teamId: string, search = "", tags = "", limit = 50) => {
+    const params = new URLSearchParams({ team_id: teamId });
+    if (search) params.set("search", search);
+    if (tags) params.set("tags", tags);
+    params.set("limit", String(limit));
+    return fetchJSON(`/artifacts?${params}`);
+  },
+  get: (id: string) => fetchJSON(`/artifacts/${id}`),
+  create: (body: {
+    team_id: string;
+    title: string;
+    content: string;
+    content_type?: string;
+    created_by?: string;
+    source_workflow_id?: string;
+    tags?: string[];
+  }) => fetchJSON("/artifacts", { method: "POST", body: JSON.stringify(body) }),
+  update: (id: string, body: { content: string; updated_by?: string; title?: string; tags?: string[] }) =>
+    fetchJSON(`/artifacts/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  delete: (id: string) => fetchJSON(`/artifacts/${id}`, { method: "DELETE" }),
+  versions: (id: string) => fetchJSON(`/artifacts/${id}/versions`),
+  comments: (id: string) => fetchJSON(`/artifacts/${id}/comments`),
+  addComment: (id: string, body: { author: string; body: string }) =>
+    fetchJSON(`/artifacts/${id}/comments`, { method: "POST", body: JSON.stringify(body) }),
+  createShareLink: (id: string, body?: { expires_hours?: number; allow_comments?: boolean; allow_approve?: boolean }) =>
+    fetchJSON(`/artifacts/${id}/share`, { method: "POST", body: JSON.stringify(body || {}) }),
+  listShareLinks: (id: string) => fetchJSON(`/artifacts/${id}/shares`),
+  revokeShareLink: (token: string) =>
+    fetchJSON(`/artifacts/shares/${token}`, { method: "DELETE" }),
+  // Public (no auth)
+  getShared: (token: string) => fetchJSON(`/artifacts/shared/${token}`),
+  addExternalComment: (token: string, body: { author: string; body: string }) =>
+    fetchJSON(`/artifacts/shared/${token}/comments`, { method: "POST", body: JSON.stringify(body) }),
+  approveShared: (token: string, body: { reviewer: string; comment?: string }) =>
+    fetchJSON(`/artifacts/shared/${token}/approve`, { method: "POST", body: JSON.stringify(body) }),
+  rejectShared: (token: string, body: { reviewer: string; comment?: string }) =>
+    fetchJSON(`/artifacts/shared/${token}/reject`, { method: "POST", body: JSON.stringify(body) }),
+};
+
+// ─── Handoffs ───────────────────────────────────────────────────────
+
+export const handoffs = {
+  list: (teamId = "", enabledOnly = true) => {
+    const params = new URLSearchParams();
+    if (teamId) params.set("team_id", teamId);
+    params.set("enabled_only", String(enabledOnly));
+    return fetchJSON(`/handoffs?${params}`);
+  },
+  get: (id: string) => fetchJSON(`/handoffs/${id}`),
+  create: (body: {
+    name: string;
+    source_team_id: string;
+    trigger_event?: string;
+    target_team_id: string;
+    target_template_id: string;
+    trigger_skill_id?: string;
+    variable_mapping?: Record<string, string>;
+    auto_start?: boolean;
+  }) => fetchJSON("/handoffs", { method: "POST", body: JSON.stringify(body) }),
+  update: (id: string, body: Record<string, any>) =>
+    fetchJSON(`/handoffs/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  delete: (id: string) => fetchJSON(`/handoffs/${id}`, { method: "DELETE" }),
+  toggle: (id: string, enabled: boolean) =>
+    fetchJSON(`/handoffs/${id}/toggle`, { method: "POST", body: JSON.stringify({ enabled }) }),
+  log: (ruleId = "", limit = 50) => {
+    const params = new URLSearchParams();
+    if (ruleId) params.set("rule_id", ruleId);
+    params.set("limit", String(limit));
+    return fetchJSON(`/handoffs/log?${params}`);
+  },
+  trigger: (body: { rule_id: string; source_workflow_id: string; source_stage_id?: string; context?: Record<string, any> }) =>
+    fetchJSON("/handoffs/trigger", { method: "POST", body: JSON.stringify(body) }),
+};
+
+// ─── Conversation History ───────────────────────────────────────────
+
+export const history = {
+  list: (teamId: string, userId = "", limit = 20) => {
+    const params = new URLSearchParams({ team_id: teamId });
+    if (userId) params.set("user_id", userId);
+    params.set("limit", String(limit));
+    return fetchJSON(`/history?${params}`);
+  },
+  similar: (teamId: string, brief: string) =>
+    fetchJSON(`/history/similar?team_id=${encodeURIComponent(teamId)}&brief=${encodeURIComponent(brief)}`),
+  detail: (sessionId: string, teamId = "") =>
+    fetchJSON(`/history/${sessionId}${teamId ? `?team_id=${encodeURIComponent(teamId)}` : ""}`),
+};

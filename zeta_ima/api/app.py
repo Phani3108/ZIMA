@@ -45,6 +45,8 @@ from zeta_ima.api.routes.teams_collab import router as teams_collab_router
 from zeta_ima.api.routes.history import router as history_router
 from zeta_ima.api.routes.scores import router as scores_router
 from zeta_ima.api.routes.prompts import router as prompts_router
+from zeta_ima.api.routes.artifacts import router as artifacts_router
+from zeta_ima.api.routes.handoffs import router as handoffs_router
 from zeta_ima.memory.brand import ensure_collection
 from zeta_ima.memory.campaign import init_db
 from zeta_ima.ingest.pipeline import init_ingest_db
@@ -241,6 +243,21 @@ def create_app() -> FastAPI:
             import logging
             logging.getLogger(__name__).warning(f"Scheduler start: {e}")
 
+        # Artifacts & Handoffs
+        try:
+            from zeta_ima.memory.artifacts import init_artifacts_db
+            await init_artifacts_db()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Artifacts DB init: {e}")
+
+        try:
+            from zeta_ima.orchestrator.handoffs import init_handoffs_db
+            await init_handoffs_db()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Handoffs DB init: {e}")
+
     # Teams bot webhook (no auth — authenticated by Bot Framework)
     app.include_router(activity_router)
 
@@ -276,6 +293,10 @@ def create_app() -> FastAPI:
     app.include_router(history_router)
     app.include_router(scores_router)
     app.include_router(prompts_router)
+
+    # Collaboration layer
+    app.include_router(artifacts_router)
+    app.include_router(handoffs_router)
 
     # WebSocket endpoints
     app.include_router(workflow_ws_router)

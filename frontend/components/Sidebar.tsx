@@ -8,7 +8,8 @@ import {
   MessageCircle, Settings, Upload, BarChart2,
   Sparkles, GitBranch, LayoutDashboard, FolderKanban,
   Brain, ListTodo, CalendarClock, FlaskConical,
-  DollarSign, Users, ChevronDown,
+  DollarSign, Users, ChevronDown, Archive,
+  MessageSquare, Share2,
 } from "lucide-react";
 import clsx from "clsx";
 import NotificationBell from "@/components/NotificationBell";
@@ -42,6 +43,15 @@ const GROUPS: NavGroup[] = [
       { href: "/analytics",   label: "Analytics",   icon: BarChart2 },
       { href: "/experiments", label: "Experiments", icon: FlaskConical },
       { href: "/costs",       label: "Costs",       icon: DollarSign },
+    ],
+  },
+  {
+    key: "collaborate",
+    label: "Collaborate",
+    items: [
+      { href: "/artifacts",      label: "Artifacts",      icon: Archive },
+      { href: "/conversations",  label: "History",        icon: MessageSquare },
+      { href: "/handoffs",       label: "Handoffs",       icon: Share2 },
     ],
   },
   {
