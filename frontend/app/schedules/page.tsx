@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { schedules, workflows } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Schedule = {
   id: string;
@@ -49,7 +50,38 @@ export default function SchedulesPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><CalendarClock size={22} /> Schedules</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Automate recurring workflows with cron-based schedules. Deploy the backend to configure scheduled triggers.</p></OfflineBanner>
+      <DemoBanner
+        feature="Schedules"
+        steps={[
+          "Start the backend and click 'New Schedule' to pick a workflow template",
+          "Set a cron expression (e.g. '0 9 * * 1' for every Monday at 9 AM)",
+          "Enable/disable schedules and track run count, last run, and next trigger",
+        ]}
+      />
+      <div className="space-y-3">
+        {[
+          { id: "s1", name: "Weekly Blog Roundup", cron_expr: "0 9 * * 1", template_id: "tpl-blog", enabled: true, run_count: 12, max_runs: 0, last_run_at: "2026-03-10T09:00:00Z", next_run_at: "2026-03-17T09:00:00Z", created_at: "2026-01-06T10:00:00Z" },
+          { id: "s2", name: "Daily Social Post", cron_expr: "0 8 * * *", template_id: "tpl-social", enabled: true, run_count: 45, max_runs: 0, last_run_at: "2026-03-11T08:00:00Z", next_run_at: "2026-03-12T08:00:00Z", created_at: "2026-01-20T08:00:00Z" },
+          { id: "s3", name: "Monthly SEO Audit", cron_expr: "0 6 1 * *", template_id: "tpl-seo", enabled: true, run_count: 3, max_runs: 12, last_run_at: "2026-03-01T06:00:00Z", next_run_at: "2026-04-01T06:00:00Z", created_at: "2026-01-01T06:00:00Z" },
+          { id: "s4", name: "Quarterly Competitor Report", cron_expr: "0 10 1 */3 *", template_id: "tpl-competitor", enabled: false, run_count: 1, max_runs: 4, last_run_at: "2026-01-01T10:00:00Z", next_run_at: null, created_at: "2025-12-15T10:00:00Z" },
+        ].map((sched) => (
+          <div key={sched.id} className="bg-white border rounded-xl p-4 flex items-center gap-4">
+            <div className={clsx("w-3 h-3 rounded-full shrink-0", sched.enabled ? "bg-green-400" : "bg-gray-300")} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-900">{sched.name}</h3>
+                <code className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-mono text-gray-500">{sched.cron_expr}</code>
+                {!sched.enabled && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Paused</span>}
+              </div>
+              <div className="flex items-center gap-4 mt-1 text-[11px] text-gray-400">
+                <span className="flex items-center gap-1"><CheckCircle2 size={10} /> {sched.run_count} runs{sched.max_runs > 0 ? ` / ${sched.max_runs} max` : ""}</span>
+                {sched.last_run_at && <span className="flex items-center gap-1"><Clock size={10} /> Last: {new Date(sched.last_run_at).toLocaleDateString()}</span>}
+                {sched.next_run_at && <span className="flex items-center gap-1"><Play size={10} /> Next: {new Date(sched.next_run_at).toLocaleDateString()}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { Send, Loader2, CheckCircle, XCircle, Bot, User } from "lucide-react";
 import clsx from "clsx";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Message =
   | { role: "user"; content: string }
@@ -52,7 +53,53 @@ export default function ChatPage() {
   }, [online]);
 
   if (checking) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-gray-400" size={24} /></div>;
-  if (!online) return <div className="max-w-3xl mx-auto px-4 py-6"><h1 className="text-xl font-semibold text-gray-800 mb-4">Zeta Chat</h1><OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Chat connects to a real-time WebSocket for AI agent conversations. Deploy the backend to start chatting with your marketing team.</p></OfflineBanner></div>;
+  if (!online) return (
+    <div className="flex flex-col h-full max-w-3xl mx-auto px-4 py-6">
+      <h1 className="text-xl font-semibold text-gray-800 mb-4">Zeta Chat</h1>
+      <DemoBanner
+        feature="Chat"
+        steps={[
+          "Start the backend — Chat uses a WebSocket connection to the AI agents",
+          "Type a marketing brief like \"Write a LinkedIn post about our Series A\"",
+          "Review the AI draft, approve or reject with feedback, iterate until perfect",
+        ]}
+      />
+      {/* Demo conversation */}
+      <div className="flex-1 space-y-4 overflow-y-auto pb-4">
+        <div className="flex justify-end">
+          <div className="bg-brand text-white rounded-2xl rounded-tr-sm px-4 py-2 max-w-lg text-sm">Write a LinkedIn post about our Series A funding of $12M</div>
+        </div>
+        <div className="flex justify-start">
+          <div className="bg-gray-100 text-gray-500 italic rounded-2xl rounded-tl-sm px-4 py-2 max-w-lg text-sm">Checking brand voice guidelines and recent company messaging...</div>
+        </div>
+        <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-gray-800">Draft #1</span>
+            <span className="text-xs text-gray-400">Series A announcement</span>
+          </div>
+          <p className="text-gray-700 text-sm whitespace-pre-wrap">🚀 Exciting news! We&apos;ve raised $12M in Series A funding led by Acme Ventures.{"\n\n"}This milestone means we can double down on our mission: making AI-powered marketing accessible to every team.{"\n\n"}What&apos;s next:{"\n"}→ Expanding our agent platform{"\n"}→ Hiring across engineering & GTM{"\n"}→ Launching 3 new integrations{"\n\n"}Thank you to our customers, team, and investors who believe in the future of autonomous marketing.{"\n\n"}#SeriesA #MarTech #AI</p>
+          <div className="flex gap-4 text-xs text-gray-500">
+            <span>brand_alignment: <strong>9/10</strong></span>
+            <span>engagement_potential: <strong>8/10</strong></span>
+            <span>clarity: <strong>9/10</strong></span>
+          </div>
+          <div className="flex gap-2">
+            <button disabled className="flex items-center gap-1 bg-green-600 text-white text-sm px-4 py-2 rounded-lg opacity-50 cursor-not-allowed">
+              <CheckCircle size={14} /> Approve
+            </button>
+            <button disabled className="flex items-center gap-1 bg-red-600 text-white text-sm px-4 py-2 rounded-lg opacity-50 cursor-not-allowed">
+              <XCircle size={14} /> Reject & Revise
+            </button>
+          </div>
+        </div>
+      </div>
+      {/* Disabled input */}
+      <div className="flex gap-2 pt-4 border-t">
+        <textarea disabled className="flex-1 border rounded-xl px-4 py-2 text-sm resize-none bg-gray-50 text-gray-400" rows={2} placeholder="Connect the backend to start chatting with your AI marketing team..." />
+        <button disabled className="bg-brand text-white px-4 py-2 rounded-xl opacity-50"><Send size={16} /></button>
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

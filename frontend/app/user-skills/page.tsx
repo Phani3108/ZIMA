@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { userSkills } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Skill = {
   id: string;
@@ -44,7 +45,57 @@ export default function UserSkillsPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><Code2 size={22} /> User Skills</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Write custom Python skill scripts that agents can invoke during workflows. Deploy the backend to create and run user skills.</p></OfflineBanner>
+      <DemoBanner
+        feature="User Skills"
+        steps={[
+          "Start the backend and click 'New Skill' to write a Python function",
+          "Validate syntax, then execute in a sandboxed environment to test output",
+          "Share skills across the team — agents can invoke them during workflows",
+        ]}
+      />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 space-y-2">
+          {[
+            { id: "sk1", name: "keyword_density", description: "Calculates keyword density for a given text", is_shared: true, tags: ["seo", "analysis"], created_by: "phani", created_at: "2026-02-10T09:00:00Z" },
+            { id: "sk2", name: "headline_scorer", description: "Scores headlines based on emotional impact and clarity", is_shared: true, tags: ["copy", "scoring"], created_by: "sarah", created_at: "2026-02-20T11:00:00Z" },
+            { id: "sk3", name: "utm_builder", description: "Generates UTM-tagged URLs from campaign parameters", is_shared: false, tags: ["tracking", "urls"], created_by: "phani", created_at: "2026-03-01T08:00:00Z" },
+          ].map((s) => (
+            <div key={s.id} className="bg-white border rounded-lg p-3 hover:border-brand cursor-pointer transition-colors">
+              <div className="flex items-center gap-2">
+                <Code2 size={14} className="text-brand shrink-0" />
+                <span className="text-sm font-semibold text-gray-900">{s.name}</span>
+                {s.is_shared && <Share2 size={10} className="text-blue-400" />}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{s.description}</p>
+              <div className="flex gap-1 mt-2">
+                {s.tags.map(t => <span key={t} className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">{t}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="lg:col-span-2">
+          <div className="bg-white border rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Code2 size={16} className="text-brand" />
+              <h3 className="font-semibold text-sm text-gray-900">keyword_density</h3>
+              <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">shared</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Calculates keyword density for a given text</p>
+            <pre className="bg-gray-900 text-green-400 text-xs rounded-lg p-4 overflow-x-auto mb-3">{`def keyword_density(text: str, keyword: str) -> float:
+    words = text.lower().split()
+    count = words.count(keyword.lower())
+    return round((count / len(words)) * 100, 2) if words else 0.0
+
+# Example: keyword_density("AI marketing is the future of marketing", "marketing")
+# Returns: 28.57`}</pre>
+            <div className="flex items-center gap-3 text-[11px] text-gray-400">
+              <span>By: phani</span>
+              <span>Tags: seo, analysis</span>
+              <span>Created: 2/10/2026</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 

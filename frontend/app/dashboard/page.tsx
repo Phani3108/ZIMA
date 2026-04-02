@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { dashboard } from "@/lib/api";
+import DemoBanner from "@/components/DemoBanner";
 
 type Summary = {
   workflows: { total: number; active: number; completed: number; cancelled: number };
@@ -100,46 +101,64 @@ export default function DashboardPage() {
           <Loader2 className="animate-spin text-gray-400" size={24} />
         </div>
       ) : !backendOnline ? (
-        <div className="text-center py-12">
-          <WifiOff size={40} className="mx-auto mb-3 text-amber-400" />
-          <p className="text-gray-600 font-medium mb-1">Backend Offline</p>
-          <p className="text-sm text-gray-400 max-w-md mx-auto mb-8">
-            The dashboard shows real-time workflow health, agent status, and escalations.
-            Deploy the backend to see live data.
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
-            <div className="bg-white rounded-xl border p-4 text-left">
-              <BarChart3 size={20} className="text-blue-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Workflow KPIs</h4>
-              <p className="text-xs text-gray-500 mt-1">Active, completed, and completion rates at a glance.</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-left">
-              <Activity size={20} className="text-green-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Activity Feed</h4>
-              <p className="text-xs text-gray-500 mt-1">Real-time stream of agent actions and stage transitions.</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-left">
-              <AlertTriangle size={20} className="text-amber-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Escalations</h4>
-              <p className="text-xs text-gray-500 mt-1">Stuck workflows flagged for human attention.</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-left">
-              <Cpu size={20} className="text-purple-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Agent Health</h4>
-              <p className="text-xs text-gray-500 mt-1">Which AI agents are active, their LLM usage, and status.</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-left">
-              <TrendingUp size={20} className="text-brand mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Trends</h4>
-              <p className="text-xs text-gray-500 mt-1">Quality improvement over time with learning metrics.</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-left">
-              <Clock size={20} className="text-red-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Review Queue</h4>
-              <p className="text-xs text-gray-500 mt-1">Stages awaiting human approval or feedback.</p>
+        <>
+          <DemoBanner
+            feature="Dashboard"
+            steps={[
+              "Run docker compose up to start Redis, PostgreSQL, and Qdrant",
+              "Start the backend with uvicorn zeta_ima.api.app:app --reload",
+              "Create workflows from the Skills Catalog or Chat — metrics appear automatically",
+            ]}
+          />
+          {/* Demo KPI cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+            <KPICard label="Total Workflows" value={24} icon={BarChart3} />
+            <KPICard label="Active" value={5} icon={Activity} color="text-blue-600" />
+            <KPICard label="Completed" value={17} icon={CheckCircle2} color="text-green-600" />
+            <KPICard label="Completion Rate" value="87%" icon={TrendingUp} color="text-brand" />
+            <KPICard label="Awaiting Review" value={3} icon={Clock} color="text-amber-600" />
+            <KPICard label="Stuck Stages" value={1} icon={AlertTriangle} color="text-red-600" />
+          </div>
+          {/* Demo Activity Feed */}
+          <h3 className="text-sm font-semibold text-gray-600 mb-3">Recent Activity</h3>
+          <div className="space-y-2 mb-6">
+            {[
+              { name: "Q3 Blog Series", stage: "SEO Review", status: "awaiting_review", agent: "seo-reviewer", time: "2 min ago" },
+              { name: "Email Nurture Campaign", stage: "Copy Generation", status: "approved", agent: "email-writer", time: "8 min ago" },
+              { name: "Social Launch Posts", stage: "Brand Voice Check", status: "in_progress", agent: "brand-guardian", time: "15 min ago" },
+              { name: "Competitor Analysis", stage: "Data Collection", status: "approved", agent: "research-agent", time: "1 hr ago" },
+              { name: "Product Landing Page", stage: "CTA Optimization", status: "needs_retry", agent: "conversion-agent", time: "2 hr ago" },
+            ].map((e, i) => {
+              const icons: Record<string, any> = { approved: CheckCircle2, needs_retry: XCircle, awaiting_review: Clock, in_progress: Loader2 };
+              const colors: Record<string, string> = { approved: "text-green-600", needs_retry: "text-red-600", awaiting_review: "text-amber-600", in_progress: "text-blue-600" };
+              const Icon = icons[e.status] || Clock;
+              return (
+                <div key={i} className="flex items-center gap-3 bg-white border rounded-lg px-4 py-3">
+                  <Icon size={14} className={clsx(colors[e.status] || "text-gray-400", e.status === "in_progress" && "animate-spin")} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-gray-800 font-medium">{e.name}</span>
+                    <span className="text-gray-400 mx-2">→</span>
+                    <span className="text-sm text-gray-500">{e.stage}</span>
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">{e.agent}</span>
+                  <span className="text-[11px] text-gray-400 shrink-0 w-16 text-right">{e.time}</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Stuck demo */}
+          <h3 className="text-sm font-semibold text-gray-600 mb-3">Escalations</h3>
+          <div className="bg-white border border-amber-200 rounded-xl p-4">
+            <div className="flex items-center gap-3">
+              <AlertTriangle size={16} className="text-amber-500" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">Product Landing Page — CTA Optimization</p>
+                <p className="text-xs text-gray-500">Stuck for 4 hours · Agent: conversion-agent · Reason: Low conversion score (3/10)</p>
+              </div>
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Needs attention</span>
             </div>
           </div>
-        </div>
+        </>
       ) : (
         <>
           {/* KPI Cards */}

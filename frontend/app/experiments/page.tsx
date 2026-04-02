@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { experiments } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Variant = {
   variant_id: string;
@@ -63,7 +64,59 @@ export default function ExperimentsPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><FlaskConical size={22} /> A/B Experiments</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Run A/B tests across LLM models, prompts, and content variants. Deploy the backend to create experiments.</p></OfflineBanner>
+      <DemoBanner
+        feature="A/B Experiments"
+        steps={[
+          "Start the backend and click 'New Experiment' — define a brief and 2+ variants",
+          "Run the experiment to generate outputs from different LLMs or prompts",
+          "Score each variant and conclude — the winner is auto-highlighted",
+        ]}
+      />
+      <div className="space-y-4">
+        {[
+          { id: "e1", name: "LinkedIn CTA Test", brief: "Compare casual vs. formal CTA on Series A post", status: "concluded", created_at: "2026-02-15T10:00:00Z", concluded_at: "2026-02-16T14:00:00Z", variants: [
+            { variant_id: "v1", variant_label: "A — Casual", llm_used: "gpt-4o", output: "\"We just raised $12M to change marketing forever. Join the ride 🚀\"", score: 8.2, feedback: "Engaging but slightly informal for investors", is_winner: true },
+            { variant_id: "v2", variant_label: "B — Formal", llm_used: "gpt-4o", output: "\"Zeta announces $12M Series A to accelerate AI-driven marketing innovation.\"", score: 7.5, feedback: "Professional but lower engagement predicted", is_winner: false },
+          ] },
+          { id: "e2", name: "Email Subject Line", brief: "Test urgency vs. curiosity subject lines for trial-to-paid email", status: "running", created_at: "2026-03-10T09:00:00Z", concluded_at: null, variants: [
+            { variant_id: "v3", variant_label: "A — Urgency", llm_used: "gpt-4o-mini", output: "\"Your trial ends tomorrow — don't lose your campaigns\"", score: null, feedback: "", is_winner: false },
+            { variant_id: "v4", variant_label: "B — Curiosity", llm_used: "claude-3-sonnet", output: "\"Here's what 14 days of AI marketing actually built for you\"", score: null, feedback: "", is_winner: false },
+          ] },
+          { id: "e3", name: "Blog Intro Hook", brief: "Stat-led vs. question-led blog opening", status: "draft", created_at: "2026-03-11T08:00:00Z", concluded_at: null, variants: [
+            { variant_id: "v5", variant_label: "A — Stat", llm_used: "", output: null, score: null, feedback: "", is_winner: false },
+            { variant_id: "v6", variant_label: "B — Question", llm_used: "", output: null, score: null, feedback: "", is_winner: false },
+          ] },
+        ].map((exp) => (
+          <div key={exp.id} className="bg-white border rounded-xl p-5">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-900 text-sm">{exp.name}</h3>
+                  <span className={clsx("text-[10px] px-2 py-0.5 rounded-full font-medium", STATUS_COLORS[exp.status] || "bg-gray-100 text-gray-600")}>{exp.status}</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">{exp.brief}</p>
+              </div>
+              <span className="text-[10px] text-gray-400">{new Date(exp.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              {exp.variants.map((v) => (
+                <div key={v.variant_id} className={clsx("border rounded-lg p-3", v.is_winner ? "border-green-300 bg-green-50" : "border-gray-100")}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-semibold text-gray-700">{v.variant_label}</span>
+                    {v.is_winner && <Trophy size={12} className="text-green-600" />}
+                    {v.llm_used && <span className="text-[10px] text-gray-400 font-mono">{v.llm_used}</span>}
+                  </div>
+                  {v.output && <p className="text-xs text-gray-600 mb-1 italic">{v.output}</p>}
+                  <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                    {v.score !== null && <span className="flex items-center gap-1"><Star size={10} className="text-amber-500" /> {v.score}/10</span>}
+                    {v.feedback && <span>{v.feedback}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 

@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { tasks } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Task = {
   id: string;
@@ -57,7 +58,60 @@ export default function TasksPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><ListTodo size={22} /> Task Queue</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">The orchestrator task pipeline manages, routes, and tracks all marketing tasks. Deploy the backend to create and manage tasks.</p></OfflineBanner>
+      <DemoBanner
+        feature="Task Queue"
+        steps={[
+          "Start the backend and click 'New Task' to submit a marketing request",
+          "The orchestrator auto-routes tasks to the best-fit agent based on skills",
+          "Track status (queued → running → completed) and filter by state",
+        ]}
+      />
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {[null, "queued", "running", "completed", "failed"].map((s) => (
+          <span key={s ?? "all"}
+            className={clsx(
+              "px-3 py-1.5 rounded-lg text-xs font-medium border",
+              s === null ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200"
+            )}>
+            {s ? STATUS_META[s]?.label ?? s : "All"}
+          </span>
+        ))}
+      </div>
+      <div className="space-y-3">
+        {[
+          { id: "t1", title: "Write Q3 blog series outline", description: "Draft 5 blog post outlines targeting product-led growth keywords", status: "completed", priority: 1, pipeline_name: "content_pipeline", assignee_agent: "copywriter", routing_rationale: "SEO + content skill match", created_at: "2026-03-01T10:00:00Z", updated_at: "2026-03-02T14:30:00Z" },
+          { id: "t2", title: "Design email header for launch", description: "Create branded header image for v2 launch email", status: "running", priority: 1, pipeline_name: "design_pipeline", assignee_agent: "designer", routing_rationale: "Visual asset request", created_at: "2026-03-10T09:00:00Z", updated_at: "2026-03-10T09:05:00Z" },
+          { id: "t3", title: "Competitor social audit", description: "Analyze competitor X social media posting frequency and engagement", status: "queued", priority: 2, pipeline_name: "research_pipeline", assignee_agent: null, routing_rationale: null, created_at: "2026-03-11T08:00:00Z", updated_at: "2026-03-11T08:00:00Z" },
+          { id: "t4", title: "Generate LinkedIn post variants", description: "3 LinkedIn post variants for Series A announcement", status: "completed", priority: 2, pipeline_name: "content_pipeline", assignee_agent: "copywriter", routing_rationale: "Copy generation skill", created_at: "2026-03-05T11:00:00Z", updated_at: "2026-03-05T16:00:00Z" },
+          { id: "t5", title: "SEMrush keyword refresh", description: "Pull latest keyword rankings and update strategy doc", status: "failed", priority: 3, pipeline_name: "seo_pipeline", assignee_agent: "seo_analyst", routing_rationale: "SEMrush integration skill", created_at: "2026-03-08T07:00:00Z", updated_at: "2026-03-08T07:01:00Z" },
+        ].map((task) => {
+          const meta = STATUS_META[task.status] || STATUS_META.queued;
+          const Icon = meta.icon;
+          const prio = PRIORITY_ICONS[task.priority] || PRIORITY_ICONS[2];
+          const PrioIcon = prio.icon;
+          return (
+            <div key={task.id} className="bg-white border rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <Icon size={16} className={clsx("mt-0.5 shrink-0", task.status === "running" && "animate-spin")} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900">{task.title}</h3>
+                    <span className={clsx("text-[10px] px-2 py-0.5 rounded-full font-medium", meta.color)}>{meta.label}</span>
+                    <PrioIcon size={12} className={prio.color} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{task.description}</p>
+                  <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-gray-400">
+                    {task.pipeline_name && <span className="bg-gray-50 px-1.5 py-0.5 rounded">{task.pipeline_name}</span>}
+                    {task.assignee_agent && <span>Agent: <strong className="text-gray-600">{task.assignee_agent}</strong></span>}
+                    {task.routing_rationale && <span className="italic">{task.routing_rationale}</span>}
+                    <span>{new Date(task.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 

@@ -7,6 +7,7 @@ import {
   CheckCircle2, Clock, Target, CalendarDays, WifiOff,
 } from "lucide-react";
 import clsx from "clsx";
+import DemoBanner from "@/components/DemoBanner";
 
 type Program = {
   id: string;
@@ -69,31 +70,49 @@ export default function ProgramsPage() {
           <Loader2 className="animate-spin text-gray-400" size={24} />
         </div>
       ) : !backendOnline ? (
-        <div className="text-center py-20">
-          <WifiOff size={40} className="mx-auto mb-3 text-amber-400" />
-          <p className="text-gray-600 font-medium mb-1">Backend Offline</p>
-          <p className="text-sm text-gray-400 max-w-md mx-auto">
-            Programs let you group related workflows into campaigns for unified tracking.
-            Deploy the backend to create programs, assign workflows, and track progress.
-          </p>
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto text-left">
-            <div className="border rounded-xl p-4 bg-white">
-              <FolderKanban size={20} className="text-blue-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Organize Campaigns</h4>
-              <p className="text-xs text-gray-500 mt-1">Group blog, social, email, and ad workflows under a single campaign.</p>
-            </div>
-            <div className="border rounded-xl p-4 bg-white">
-              <Target size={20} className="text-green-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Track Progress</h4>
-              <p className="text-xs text-gray-500 mt-1">See completion rates across all workflows with progress bars and dates.</p>
-            </div>
-            <div className="border rounded-xl p-4 bg-white">
-              <CalendarDays size={20} className="text-purple-500 mb-2" />
-              <h4 className="text-sm font-semibold text-gray-800">Set Deadlines</h4>
-              <p className="text-xs text-gray-500 mt-1">Assign target dates and get notified when deadlines approach.</p>
-            </div>
+        <>
+          <DemoBanner
+            feature="Programs"
+            steps={[
+              "Start the backend and click \"New Program\" to group related workflows",
+              "Assign workflows to the program — they share a campaign context",
+              "Track progress across all workflows with unified completion metrics",
+            ]}
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { name: "Q2 Product Launch", description: "Full content campaign for v2 launch", workflow_count: 6, completed_count: 4, target_date: "2026-04-30", tags: ["launch", "q2"], created_at: "2026-03-01T08:00:00Z" },
+              { name: "Brand Refresh 2026", description: "Update brand voice, visuals, and messaging across all channels", workflow_count: 4, completed_count: 4, target_date: "2026-03-15", tags: ["brand", "refresh"], created_at: "2026-02-01T10:00:00Z" },
+              { name: "SEO Content Sprint", description: "10 SEO-optimized blog posts targeting high-value keywords", workflow_count: 10, completed_count: 7, target_date: "2026-05-15", tags: ["seo", "content"], created_at: "2026-03-10T09:00:00Z" },
+            ].map((prog, i) => {
+              const progress = Math.round((prog.completed_count / prog.workflow_count) * 100);
+              return (
+                <div key={i} className="bg-white border rounded-xl p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{prog.name}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">{prog.description}</p>
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
+                      <span>{prog.completed_count}/{prog.workflow_count} workflows completed</span>
+                      <span className="font-semibold">{progress}%</span>
+                    </div>
+                    <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div className="bg-brand h-full rounded-full" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 text-[11px] text-gray-400">
+                    <span className="flex items-center gap-1"><Clock size={10} /> {new Date(prog.created_at).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><Target size={10} /> Due: {new Date(prog.target_date).toLocaleDateString()}</span>
+                    {prog.tags.map((t) => <span key={t} className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px]">{t}</span>)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </>
       ) : programs.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <FolderKanban size={40} className="mx-auto mb-3 text-gray-300" />

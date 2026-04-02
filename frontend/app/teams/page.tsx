@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { teams } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Member = {
   user_id: string;
@@ -64,7 +65,52 @@ export default function TeamsPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><Users size={22} /> Teams</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Create and manage marketing teams with role-based members. Deploy the backend to organize your teams.</p></OfflineBanner>
+      <DemoBanner
+        feature="Teams"
+        steps={[
+          "Start the backend and click 'New Team' to create a marketing team",
+          "Add members with roles (admin, manager, strategist, copywriter, designer)",
+          "Teams share context and can be assigned to workflows and programs",
+        ]}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[
+          { id: "team1", name: "Content Team", description: "Blog posts, social copy, and email content creation", created_by: "phani", created_at: "2026-01-15T10:00:00Z", members: [
+            { user_id: "u1", display_name: "Phani M.", email: "phani@zeta.ai", role: "admin", joined_at: "2026-01-15T10:00:00Z" },
+            { user_id: "u2", display_name: "Sarah K.", email: "sarah@zeta.ai", role: "copywriter", joined_at: "2026-01-16T09:00:00Z" },
+            { user_id: "u3", display_name: "Alex R.", email: "alex@zeta.ai", role: "strategist", joined_at: "2026-01-17T11:00:00Z" },
+          ] },
+          { id: "team2", name: "Design & Brand", description: "Visual assets, brand guidelines, and creative direction", created_by: "phani", created_at: "2026-02-01T08:00:00Z", members: [
+            { user_id: "u1", display_name: "Phani M.", email: "phani@zeta.ai", role: "admin", joined_at: "2026-02-01T08:00:00Z" },
+            { user_id: "u4", display_name: "Maya L.", email: "maya@zeta.ai", role: "designer", joined_at: "2026-02-02T10:00:00Z" },
+          ] },
+          { id: "team3", name: "Growth & SEO", description: "Keyword research, competitor analysis, and organic growth", created_by: "phani", created_at: "2026-02-10T09:00:00Z", members: [
+            { user_id: "u5", display_name: "Jordan P.", email: "jordan@zeta.ai", role: "manager", joined_at: "2026-02-10T09:00:00Z" },
+            { user_id: "u6", display_name: "Casey T.", email: "casey@zeta.ai", role: "member", joined_at: "2026-02-11T10:00:00Z" },
+          ] },
+        ].map((team) => {
+          const RoleIcon = ROLE_ICONS["admin"] || UserCircle;
+          return (
+            <div key={team.id} className="bg-white border rounded-xl p-5">
+              <h3 className="font-semibold text-gray-900">{team.name}</h3>
+              <p className="text-xs text-gray-500 mt-0.5 mb-3">{team.description}</p>
+              <div className="space-y-2">
+                {team.members.map((m) => {
+                  const MIcon = ROLE_ICONS[m.role] || UserCircle;
+                  return (
+                    <div key={m.user_id} className="flex items-center gap-2 text-sm">
+                      <MIcon size={14} className="text-gray-400" />
+                      <span className="text-gray-700">{m.display_name}</span>
+                      <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full font-medium", ROLE_COLORS[m.role] || ROLE_COLORS.member)}>{m.role}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="text-[10px] text-gray-400 mt-3">{team.members.length} members · Created {new Date(team.created_at).toLocaleDateString()}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 

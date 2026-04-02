@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { costs } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Report = {
   total_cost: number;
@@ -51,7 +52,56 @@ export default function CostsPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><DollarSign size={22} /> Cost Tracker</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">Tracks LLM spending, token usage, and rate limits across all agents. Deploy the backend to see cost data.</p></OfflineBanner>
+      <DemoBanner
+        feature="Cost Tracker"
+        steps={[
+          "Start the backend — costs are logged automatically for every LLM call",
+          "Select a time range to see total spend, token usage, and per-model breakdown",
+          "Monitor rate-limit usage % to avoid throttling during peak campaigns",
+        ]}
+      />
+      {/* Demo summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white border rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">Total Cost</div><div className="text-xl font-bold text-gray-900">$47.23</div></div>
+        <div className="bg-white border rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">Total Tokens</div><div className="text-xl font-bold text-gray-900">1.2M</div></div>
+        <div className="bg-white border rounded-xl p-4"><div className="text-xs text-gray-500 mb-1">Requests</div><div className="text-xl font-bold text-gray-900">384</div></div>
+        <div className="bg-white border rounded-xl p-4">
+          <div className="text-xs text-gray-500 mb-1">Usage</div>
+          <div className="text-xl font-bold text-gray-900">32%</div>
+          <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2"><div className="h-1.5 rounded-full bg-brand" style={{ width: "32%" }} /></div>
+        </div>
+      </div>
+      {/* Demo daily spend chart */}
+      <div className="bg-white border rounded-xl p-6 mb-6">
+        <h3 className="font-semibold text-sm text-gray-900 mb-4">Daily Spend (Demo)</h3>
+        <div className="flex items-end gap-1 h-32">
+          {[1.20, 0.85, 2.10, 1.75, 3.40, 2.90, 1.60, 0.95, 2.50, 1.30, 2.80, 3.10, 1.45, 2.00].map((cost, i) => (
+            <div key={i} className="flex-1 bg-blue-200 rounded-t hover:bg-blue-400 transition-colors" style={{ height: `${(cost / 3.4) * 100}%`, minHeight: 2 }} />
+          ))}
+        </div>
+        <div className="flex justify-between text-[9px] text-gray-400 mt-1"><span>Mar 1</span><span>Mar 14</span></div>
+      </div>
+      {/* Demo model breakdown */}
+      <div className="bg-white border rounded-xl p-5">
+        <h3 className="font-semibold text-sm text-gray-900 mb-3">Cost by Model (Demo)</h3>
+        <div className="space-y-2">
+          {[
+            { model: "gpt-4o", cost: 28.50, tokens: 680000, requests: 142 },
+            { model: "gpt-4o-mini", cost: 8.40, tokens: 320000, requests: 185 },
+            { model: "claude-3-sonnet", cost: 6.20, tokens: 140000, requests: 38 },
+            { model: "gemini-1.5-flash", cost: 4.13, tokens: 60000, requests: 19 },
+          ].map((m) => (
+            <div key={m.model} className="flex items-center justify-between text-sm">
+              <span className="font-mono text-xs text-gray-700">{m.model}</span>
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span>{(m.tokens / 1000).toFixed(0)}k tokens</span>
+                <span>{m.requests} req</span>
+                <span className="font-semibold text-gray-900">${m.cost.toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 

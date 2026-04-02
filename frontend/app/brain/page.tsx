@@ -5,6 +5,7 @@ import { Brain, Search, Plus, ChevronDown, ChevronUp, AlertTriangle, Zap, Refres
 import { brain, distill } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,26 @@ export default function BrainPage() {
   if (!online && !checking) return (
     <div className="max-w-5xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 mb-4"><Brain size={22} /> Agency Brain</h1>
-      <OfflineBanner><p className="text-sm text-gray-400 max-w-md mx-auto">The Agency Brain is the aggregated knowledge base from all campaigns, brand guidelines, and agent learning. Deploy the backend to search, contribute, and resolve conflicts.</p></OfflineBanner>
+      <DemoBanner
+        feature="Agency Brain"
+        steps={[
+          "Start the backend and ingest brand documents via the Ingest page",
+          "Use the search bar to query the knowledge base — results are vector-matched",
+          "Contribute new knowledge or resolve conflicting entries as they appear",
+        ]}
+      />
+      <div className="space-y-3 mt-2">
+        {[
+          { id: "b1", text: "Always use active voice and keep sentences under 20 words for social media copy.", category: "brand_voice", level: "zeta", confidence: 0.94, tags: ["tone", "social"], status: "active" },
+          { id: "b2", text: "Blog intros should lead with a statistic or bold claim to hook readers within 3 seconds.", category: "copy_pattern", level: "team", confidence: 0.88, tags: ["blog", "hook"], status: "active" },
+          { id: "b3", text: "Primary CTA color is #4F46E5 (indigo-600); secondary actions use ghost buttons.", category: "design_guideline", level: "zeta", confidence: 0.97, tags: ["design", "cta"], status: "active" },
+          { id: "b4", text: "Competitor X shifted to short-form video — their engagement rose 42% in Q1.", category: "market_insight", level: "personal", confidence: 0.73, tags: ["competitor", "video"], status: "active" },
+          { id: "b5", text: "Client prefers 'we' over 'our company' and avoids jargon in customer-facing copy.", category: "client_preference", level: "team", confidence: 0.91, tags: ["client", "language"], status: "active" },
+          { id: "b6", text: "Emails should use casual tone per brand guide, but recent feedback says be more formal.", category: "brand_voice", level: "zeta", confidence: 0.65, tags: ["email", "tone"], status: "conflict" },
+        ].map((entry) => (
+          <KnowledgeCard key={entry.id} entry={entry as any} />
+        ))}
+      </div>
     </div>
   );
 

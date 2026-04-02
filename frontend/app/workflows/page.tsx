@@ -10,6 +10,7 @@ import clsx from "clsx";
 import { workflows } from "@/lib/api";
 import { useBackend } from "@/lib/useBackend";
 import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 
 type Stage = {
   id: string;
@@ -68,6 +69,87 @@ export default function WorkflowsPage() {
   };
 
   useEffect(() => { if (online) loadWorkflows(); }, [filter, online]);
+
+  const DEMO_WORKFLOWS: Workflow[] = [
+    { id: "wf-demo-1", name: "Q3 Blog Series — SEO Optimized", skill_id: "blog_writer", template_id: "seo_blog", status: "active", current_stage_index: 2,
+      created_at: "2026-03-25T08:00:00Z", updated_at: "2026-04-01T14:20:00Z",
+      stages: [
+        { id: "s1", name: "Keyword Research", status: "approved", agent_name: "seo-researcher", requires_approval: false },
+        { id: "s2", name: "Outline Draft", status: "approved", agent_name: "content-strategist", requires_approval: true },
+        { id: "s3", name: "Full Draft", status: "awaiting_review", agent_name: "blog-writer", requires_approval: true },
+        { id: "s4", name: "Brand Voice Check", status: "pending", agent_name: "brand-guardian", requires_approval: false },
+      ] },
+    { id: "wf-demo-2", name: "Email Nurture — Trial to Paid", skill_id: "email_sequence", template_id: "nurture", status: "active", current_stage_index: 1,
+      created_at: "2026-03-28T10:00:00Z", updated_at: "2026-04-01T09:30:00Z",
+      stages: [
+        { id: "s1", name: "Audience Segmentation", status: "approved", agent_name: "data-analyst", requires_approval: false },
+        { id: "s2", name: "Email Copy (5 emails)", status: "in_progress", agent_name: "email-writer", requires_approval: true },
+        { id: "s3", name: "Subject Line A/B Test", status: "pending", agent_name: "experiment-agent", requires_approval: true },
+      ] },
+    { id: "wf-demo-3", name: "Social Launch Posts — Product v2", skill_id: "social_manager", template_id: "launch_social", status: "active", current_stage_index: 0,
+      created_at: "2026-04-01T07:00:00Z", updated_at: "2026-04-01T07:00:00Z",
+      stages: [
+        { id: "s1", name: "Platform Strategy", status: "in_progress", agent_name: "social-strategist", requires_approval: false },
+        { id: "s2", name: "Copy Generation", status: "pending", agent_name: "social-writer", requires_approval: true },
+        { id: "s3", name: "Visual Brief", status: "pending", agent_name: "design-agent", requires_approval: true },
+      ] },
+    { id: "wf-demo-4", name: "Competitor SEO Analysis", skill_id: "competitive_intel", template_id: null, status: "completed", current_stage_index: 2,
+      created_at: "2026-03-20T09:00:00Z", updated_at: "2026-03-23T16:00:00Z",
+      stages: [
+        { id: "s1", name: "Data Collection", status: "approved", agent_name: "research-agent", requires_approval: false },
+        { id: "s2", name: "Gap Analysis", status: "approved", agent_name: "seo-analyst", requires_approval: true },
+        { id: "s3", name: "Report Generation", status: "approved", agent_name: "report-writer", requires_approval: true },
+      ] },
+    { id: "wf-demo-5", name: "Brand Guidelines Refresh", skill_id: "brand_voice", template_id: null, status: "completed", current_stage_index: 1,
+      created_at: "2026-03-15T11:00:00Z", updated_at: "2026-03-18T15:30:00Z",
+      stages: [
+        { id: "s1", name: "Voice Analysis", status: "approved", agent_name: "brand-analyst", requires_approval: false },
+        { id: "s2", name: "Guidelines Draft", status: "approved", agent_name: "brand-writer", requires_approval: true },
+      ] },
+  ];
+
+  if (!online && !checking) {
+    const demoColumns = [
+      { key: "active", label: "Active", items: DEMO_WORKFLOWS.filter((w) => w.status === "active") },
+      { key: "completed", label: "Completed", items: DEMO_WORKFLOWS.filter((w) => w.status === "completed") },
+      { key: "cancelled", label: "Cancelled", items: [] as Workflow[] },
+    ];
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Workflows</h1>
+            <p className="text-gray-500 mt-1 text-sm">Track multi-stage marketing workflows end to end.</p>
+          </div>
+        </div>
+        <DemoBanner
+          feature="Workflows"
+          steps={[
+            "Start the backend and navigate to Skills Catalog to pick a workflow template",
+            "Fill in variables (brand name, topic, audience) and click \"Start Workflow\"",
+            "Approve or reject each stage — agents iterate based on your feedback",
+            "Completed workflows feed into Analytics and the learning loop",
+          ]}
+        />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {demoColumns.map((col) => (
+            <div key={col.key}>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-gray-600">{col.label}</h3>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{col.items.length}</span>
+              </div>
+              <div className="space-y-3">
+                {col.items.map((wf) => <WorkflowCard key={wf.id} workflow={wf} />)}
+                {col.items.length === 0 && (
+                  <div className="text-center py-8 text-xs text-gray-300 border border-dashed rounded-xl">No {col.label.toLowerCase()} workflows</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (!online && !checking) return (
     <div className="max-w-7xl mx-auto px-6 py-8">
