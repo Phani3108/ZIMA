@@ -41,6 +41,44 @@ type HealthServices = Record<string, { status: string; error?: string; backend?:
 
 type CategoryMeta = { label: string; icon: string; order: number };
 
+/* ─── Static fallback data (shown when backend is offline) ────── */
+
+const STATIC_INFRA: Record<string, InfraService> = {
+  postgresql: { label: "PostgreSQL", category: "infrastructure", description: "Primary relational database for workflows, programs, and analytics.", env_vars: ["DATABASE_URL"], env_status: {}, configured: false, setup_url: "https://portal.azure.com/#create/Microsoft.PostgreSQLServer", setup_steps: ["Create an Azure Database for PostgreSQL Flexible Server", "Set DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/zeta_ima"] },
+  redis: { label: "Redis", category: "infrastructure", description: "Cache & pub/sub for real-time notifications and session state.", env_vars: ["REDIS_URL"], env_status: {}, configured: false, setup_url: "https://portal.azure.com/#create/Microsoft.Cache", setup_steps: ["Create an Azure Cache for Redis instance", "Set REDIS_URL=redis://host:6380?ssl=true"] },
+  qdrant: { label: "Qdrant / Vector Store", category: "infrastructure", description: "Vector database for brand memory and semantic search.", env_vars: ["QDRANT_URL"], env_status: {}, configured: false, setup_url: "https://cloud.qdrant.io/", setup_steps: ["Create a Qdrant Cloud cluster (or use Azure AI Search)", "Set QDRANT_URL=https://your-cluster.qdrant.io:6333"] },
+  azure_openai: { label: "Azure OpenAI", category: "azure", description: "LLM provider for all agent reasoning and content generation.", env_vars: ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"], env_status: {}, configured: false, setup_url: "https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI", setup_steps: ["Create an Azure OpenAI resource", "Deploy gpt-4o and embedding models", "Set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT"] },
+  azure_blob: { label: "Azure Blob Storage", category: "azure", description: "File storage for ingested documents and generated assets.", env_vars: ["AZURE_STORAGE_CONNECTION_STRING"], env_status: {}, configured: false, setup_url: "https://portal.azure.com/#create/Microsoft.StorageAccount", setup_steps: ["Create a Storage Account", "Set AZURE_STORAGE_CONNECTION_STRING"] },
+  azure_keyvault: { label: "Azure Key Vault", category: "azure", description: "Secure credential storage for all API keys.", env_vars: ["AZURE_KEYVAULT_URL"], env_status: {}, configured: false, setup_url: "https://portal.azure.com/#create/Microsoft.KeyVault", setup_steps: ["Create a Key Vault", "Set AZURE_KEYVAULT_URL=https://your-vault.vault.azure.net/"] },
+  teams_bot: { label: "Microsoft Teams Bot", category: "microsoft", description: "Teams bot for chat-based marketing operations.", env_vars: ["TEAMS_APP_ID", "TEAMS_APP_PASSWORD"], env_status: {}, configured: false, setup_url: "https://dev.teams.microsoft.com/", setup_steps: ["Register a bot in Azure Bot Service", "Set TEAMS_APP_ID and TEAMS_APP_PASSWORD"] },
+};
+
+const STATIC_INTEGRATIONS: Integration[] = [
+  { name: "azure_openai", label: "Azure OpenAI", category: "llm", description: "Primary LLM for content generation", configured: false, required: true, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://portal.azure.com", setup_steps: ["Create Azure OpenAI resource", "Deploy gpt-4o model", "Copy API key"] },
+  { name: "openai", label: "OpenAI", category: "llm", description: "Fallback LLM provider", configured: false, required: false, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://platform.openai.com/api-keys", setup_steps: ["Create account at platform.openai.com", "Generate API key"] },
+  { name: "gemini", label: "Google Gemini", category: "llm", description: "Google AI for image understanding", configured: false, required: false, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://aistudio.google.com/apikey", setup_steps: ["Go to Google AI Studio", "Create API key"] },
+  { name: "canva", label: "Canva", category: "creative", description: "Design generation and templates", configured: false, required: false, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://www.canva.com/developers/", setup_steps: ["Register at Canva Developer Portal", "Create an app and get API key"] },
+  { name: "figma", label: "Figma", category: "creative", description: "Design collaboration and assets", configured: false, required: false, key_definitions: [{ name: "access_token", label: "Access Token", secret: true }], setup_url: "https://www.figma.com/developers/api", setup_steps: ["Go to Figma → Settings → Personal Access Tokens", "Generate a new token"] },
+  { name: "dalle", label: "DALL·E", category: "creative", description: "AI image generation via OpenAI", configured: false, required: false, key_definitions: [{ name: "api_key", label: "OpenAI Key", secret: true }], setup_url: "https://platform.openai.com/api-keys", setup_steps: ["Uses your OpenAI API key", "Ensure DALL·E model access is enabled"] },
+  { name: "buffer", label: "Buffer", category: "publishing", description: "Social media scheduling", configured: false, required: false, key_definitions: [{ name: "access_token", label: "Access Token", secret: true }], setup_url: "https://buffer.com/developers/api", setup_steps: ["Create Buffer developer app", "Get access token via OAuth"] },
+  { name: "linkedin", label: "LinkedIn", category: "publishing", description: "LinkedIn post publishing", configured: false, required: false, key_definitions: [{ name: "access_token", label: "Access Token", secret: true }], setup_url: "https://www.linkedin.com/developers/", setup_steps: ["Create LinkedIn app", "Request Marketing API access", "Generate OAuth token"] },
+  { name: "mailchimp", label: "Mailchimp", category: "email", description: "Email campaign management", configured: false, required: false, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://mailchimp.com/developer/", setup_steps: ["Go to Mailchimp → Account → API Keys", "Generate a new key"] },
+  { name: "sendgrid", label: "SendGrid", category: "email", description: "Transactional email delivery", configured: false, required: false, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://app.sendgrid.com/settings/api_keys", setup_steps: ["Go to SendGrid dashboard → API Keys", "Create key with Mail Send permission"] },
+  { name: "semrush", label: "SEMrush", category: "seo", description: "SEO analytics and keyword research", configured: false, required: false, key_definitions: [{ name: "api_key", label: "API Key", secret: true }], setup_url: "https://www.semrush.com/api/", setup_steps: ["Subscribe to SEMrush API plan", "Copy API key from dashboard"] },
+  { name: "github", label: "GitHub", category: "devops", description: "Code repository integration", configured: false, required: false, key_definitions: [{ name: "token", label: "Personal Access Token", secret: true }], setup_url: "https://github.com/settings/tokens", setup_steps: ["Go to GitHub → Settings → Developer settings → Tokens", "Generate token with repo scope"] },
+  { name: "jira", label: "Jira", category: "devops", description: "Project management integration", configured: false, required: false, key_definitions: [{ name: "api_token", label: "API Token", secret: true }, { name: "email", label: "Email", secret: false }, { name: "domain", label: "Domain (e.g. yoursite.atlassian.net)", secret: false }], setup_url: "https://id.atlassian.com/manage-profile/security/api-tokens", setup_steps: ["Go to Atlassian account → Security → API Tokens", "Create a token"] },
+  { name: "confluence", label: "Confluence", category: "devops", description: "Document collaboration", configured: false, required: false, key_definitions: [{ name: "api_token", label: "API Token", secret: true }, { name: "email", label: "Email", secret: false }, { name: "domain", label: "Domain", secret: false }], setup_url: "https://id.atlassian.com/manage-profile/security/api-tokens", setup_steps: ["Uses same Atlassian API token as Jira"] },
+];
+
+const STATIC_CATEGORIES: Record<string, CategoryMeta> = {
+  llm: { label: "AI / LLM Providers", icon: "brain", order: 1 },
+  creative: { label: "Creative Tools", icon: "palette", order: 2 },
+  publishing: { label: "Publishing & Social", icon: "share2", order: 3 },
+  email: { label: "Email Marketing", icon: "mail", order: 4 },
+  seo: { label: "SEO & Analytics", icon: "search", order: 5 },
+  devops: { label: "DevOps & Collaboration", icon: "gitBranch", order: 6 },
+};
+
 /* ─── Icon helper ───────────────────────────────────────────────── */
 
 const CATEGORY_ICONS: Record<string, React.ComponentType<{ size?: number | string; className?: string }>> = {
@@ -376,23 +414,29 @@ export default function SettingsPage() {
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"overview" | "infra" | "integrations">("overview");
+  const [backendOnline, setBackendOnline] = useState(true);
 
-  // Fetch everything on mount
+  // Fetch everything on mount — fall back to static data if backend is offline
   useEffect(() => {
     Promise.all([
-      fetch("/api/settings/integrations").then((r) => r.json()),
-      fetch("/api/health/system").then((r) => r.json()),
-      fetch("/api/health").then((r) => r.json()),
+      fetch("/api/settings/integrations").then((r) => r.ok ? r.json() : null).catch(() => null),
+      fetch("/api/health/system").then((r) => r.ok ? r.json() : null).catch(() => null),
+      fetch("/api/health").then((r) => r.ok ? r.json() : null).catch(() => null),
     ])
       .then(([intgData, sysData, healthData]) => {
-        setIntegrations(intgData);
-        setInfra(sysData.infra || {});
-        setCategories(sysData.categories || {});
-        setHealth(healthData.services || {});
+        const online = !!(intgData && sysData);
+        setBackendOnline(online);
+        setIntegrations(online ? intgData : STATIC_INTEGRATIONS);
+        setInfra(online ? (sysData?.infra || {}) : STATIC_INFRA);
+        setCategories(online ? (sysData?.categories || {}) : STATIC_CATEGORIES);
+        setHealth(healthData?.services || {});
         setLoading(false);
       })
-      .catch((err) => {
-        console.error("Failed to load settings:", err);
+      .catch(() => {
+        setBackendOnline(false);
+        setIntegrations(STATIC_INTEGRATIONS);
+        setInfra(STATIC_INFRA);
+        setCategories(STATIC_CATEGORIES);
         setLoading(false);
       });
   }, []);
@@ -547,6 +591,19 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
+
+      {/* Offline banner */}
+      {!backendOnline && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 mb-6 flex items-start gap-3">
+          <WifiOff size={18} className="text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800">Backend Offline</h3>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Showing the integration catalog with setup guides. Deploy the backend and set <code className="bg-amber-100 px-1 rounded">NEXT_PUBLIC_API_URL</code> to enable live status checks, credential saving, and connection testing.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ─── Overview tab ──────────────────────────────────────── */}
       {tab === "overview" && (

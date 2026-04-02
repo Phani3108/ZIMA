@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Plus, FolderKanban, Loader2, ChevronRight,
-  CheckCircle2, Clock, Target, CalendarDays,
+  CheckCircle2, Clock, Target, CalendarDays, WifiOff,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -25,13 +25,14 @@ export default function ProgramsPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [backendOnline, setBackendOnline] = useState(true);
 
   const loadPrograms = () => {
     setLoading(true);
     fetch("/api/programs")
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
       .then((data) => { setPrograms(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch(() => { setBackendOnline(false); setLoading(false); });
   };
 
   useEffect(() => { loadPrograms(); }, []);
@@ -66,6 +67,32 @@ export default function ProgramsPage() {
       {loading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="animate-spin text-gray-400" size={24} />
+        </div>
+      ) : !backendOnline ? (
+        <div className="text-center py-20">
+          <WifiOff size={40} className="mx-auto mb-3 text-amber-400" />
+          <p className="text-gray-600 font-medium mb-1">Backend Offline</p>
+          <p className="text-sm text-gray-400 max-w-md mx-auto">
+            Programs let you group related workflows into campaigns for unified tracking.
+            Deploy the backend to create programs, assign workflows, and track progress.
+          </p>
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto text-left">
+            <div className="border rounded-xl p-4 bg-white">
+              <FolderKanban size={20} className="text-blue-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Organize Campaigns</h4>
+              <p className="text-xs text-gray-500 mt-1">Group blog, social, email, and ad workflows under a single campaign.</p>
+            </div>
+            <div className="border rounded-xl p-4 bg-white">
+              <Target size={20} className="text-green-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Track Progress</h4>
+              <p className="text-xs text-gray-500 mt-1">See completion rates across all workflows with progress bars and dates.</p>
+            </div>
+            <div className="border rounded-xl p-4 bg-white">
+              <CalendarDays size={20} className="text-purple-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Set Deadlines</h4>
+              <p className="text-xs text-gray-500 mt-1">Assign target dates and get notified when deadlines approach.</p>
+            </div>
+          </div>
         </div>
       ) : programs.length === 0 ? (
         <div className="text-center py-20 text-gray-400">

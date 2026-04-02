@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, Sparkles, Target, Rocket, Share2, ChevronRight } from "lucide-react";
+import { Search, Sparkles, Target, Rocket, Share2, ChevronRight, WifiOff } from "lucide-react";
 import clsx from "clsx";
 import { skills } from "@/lib/api";
 
@@ -23,19 +23,48 @@ const CATEGORY_META: Record<string, { label: string; color: string; icon: any }>
   distribution: { label: "Distribution", color: "bg-green-100 text-green-700 border-green-200", icon: Share2 },
 };
 
+/* ─── Static catalog shown when backend is offline ──────────────── */
+
+const STATIC_SKILLS: Skill[] = [
+  { id: "brand-voice", name: "Brand Voice Builder", description: "Analyze existing content and establish tone, vocabulary, and style rules for consistent brand communication.", icon: "🎤", category: "foundation", platforms: ["all"], prompts: [{ id: "analyze", name: "Analyze Brand Voice", description: "Extract tone and style from sample content" }, { id: "guidelines", name: "Generate Guidelines", description: "Create a brand voice guide document" }]  },
+  { id: "audience-persona", name: "Audience Persona Creator", description: "Build detailed customer personas from demographics, behavior patterns, and market research data.", icon: "👥", category: "foundation", platforms: ["all"], prompts: [{ id: "create", name: "Create Persona", description: "Generate a detailed audience persona" }] },
+  { id: "content-strategy", name: "Content Strategy Planner", description: "Develop a comprehensive content calendar with topic clusters, SEO targets, and distribution channels.", icon: "📅", category: "strategy", platforms: ["blog", "social", "email"], prompts: [{ id: "plan", name: "Plan Strategy", description: "Generate a content strategy document" }, { id: "calendar", name: "Build Calendar", description: "Create a monthly content calendar" }] },
+  { id: "seo-brief", name: "SEO Content Brief", description: "Generate keyword-optimized content briefs with search intent analysis, competitor gaps, and outline structure.", icon: "🔍", category: "strategy", platforms: ["blog", "web"], prompts: [{ id: "brief", name: "Generate Brief", description: "Create an SEO-optimized content brief" }] },
+  { id: "blog-writer", name: "Blog Post Writer", description: "Write long-form blog posts with SEO optimization, structured headings, and engaging narrative flow.", icon: "✍️", category: "execution", platforms: ["blog"], prompts: [{ id: "draft", name: "Write Draft", description: "Generate a full blog post" }, { id: "outline", name: "Create Outline", description: "Build a structured outline" }] },
+  { id: "social-copy", name: "Social Media Copy", description: "Create platform-specific social media posts with hashtags, CTAs, and engagement hooks.", icon: "📱", category: "execution", platforms: ["linkedin", "twitter", "instagram"], prompts: [{ id: "post", name: "Write Post", description: "Generate a social media post" }, { id: "thread", name: "Create Thread", description: "Build a multi-post thread" }] },
+  { id: "email-campaign", name: "Email Campaign Writer", description: "Craft email sequences with subject lines, preview text, body copy, and A/B test variants.", icon: "📧", category: "execution", platforms: ["email"], prompts: [{ id: "sequence", name: "Write Sequence", description: "Generate a multi-email campaign" }, { id: "single", name: "Write Single", description: "Write one email with A/B variants" }] },
+  { id: "ad-copy", name: "Ad Copy Generator", description: "Generate high-converting ad copy for Google, Meta, and LinkedIn with headline variants.", icon: "📢", category: "execution", platforms: ["google-ads", "meta", "linkedin"], prompts: [{ id: "generate", name: "Generate Ads", description: "Create ad copy with multiple variants" }] },
+  { id: "social-scheduler", name: "Social Scheduler", description: "Schedule and publish content across social platforms with optimal timing suggestions.", icon: "⏰", category: "distribution", platforms: ["buffer", "linkedin"], prompts: [{ id: "schedule", name: "Schedule Posts", description: "Queue posts with optimal timing" }] },
+  { id: "campaign-analytics", name: "Campaign Analytics", description: "Analyze campaign performance across channels with actionable insights and optimization recommendations.", icon: "📊", category: "distribution", platforms: ["all"], prompts: [{ id: "report", name: "Generate Report", description: "Create a performance analytics report" }] },
+  { id: "competitive-intel", name: "Competitive Intelligence", description: "Monitor competitor content, messaging, and positioning to identify opportunities and gaps.", icon: "🕵️", category: "strategy", platforms: ["all"], prompts: [{ id: "analyze", name: "Analyze Competitor", description: "Deep-dive on a competitor's strategy" }] },
+  { id: "product-launch", name: "Product Launch Kit", description: "Generate a complete product launch package: press release, landing page copy, email blasts, and social campaigns.", icon: "🚀", category: "execution", platforms: ["all"], prompts: [{ id: "kit", name: "Generate Launch Kit", description: "Create full product launch materials" }] },
+];
+
 export default function SkillsPage() {
   const [allSkills, setAllSkills] = useState<Skill[]>([]);
   const [filteredSkills, setFilteredSkills] = useState<Skill[]>([]);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backendOnline, setBackendOnline] = useState(true);
 
   useEffect(() => {
     skills.list().then((data) => {
-      setAllSkills(data);
-      setFilteredSkills(data);
+      if (data && Array.isArray(data) && data.length > 0) {
+        setAllSkills(data);
+        setFilteredSkills(data);
+      } else {
+        setBackendOnline(false);
+        setAllSkills(STATIC_SKILLS);
+        setFilteredSkills(STATIC_SKILLS);
+      }
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      setBackendOnline(false);
+      setAllSkills(STATIC_SKILLS);
+      setFilteredSkills(STATIC_SKILLS);
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -68,6 +97,17 @@ export default function SkillsPage() {
       </div>
 
       {/* Search + Filters */}
+      {!backendOnline && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 mb-6 flex items-start gap-3">
+          <WifiOff size={18} className="text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800">Preview Mode</h3>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Showing the built-in skills catalog. Connect a backend to run workflows and execute prompts.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

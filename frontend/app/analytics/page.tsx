@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BarChart2, TrendingUp, Target, Layers, WifiOff } from "lucide-react";
 
 type Output = {
   id: string;
@@ -21,16 +22,61 @@ export default function AnalyticsPage() {
   const [outputs, setOutputs] = useState<Output[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [backendOnline, setBackendOnline] = useState(true);
 
   useEffect(() => {
-    fetch("/api/analytics/outputs").then((r) => r.json()).then(setOutputs).catch(console.error);
-    fetch("/api/analytics/stats").then((r) => r.json()).then(setStats).catch(console.error);
+    Promise.all([
+      fetch("/api/analytics/outputs").then((r) => { if (!r.ok) throw new Error(); return r.json(); }).catch(() => null),
+      fetch("/api/analytics/stats").then((r) => { if (!r.ok) throw new Error(); return r.json(); }).catch(() => null),
+    ]).then(([o, s]) => {
+      if (o === null && s === null) {
+        setBackendOnline(false);
+      } else {
+        if (o) setOutputs(o);
+        if (s) setStats(s);
+      }
+    });
   }, []);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h1 className="text-xl font-semibold text-gray-800 mb-6">Analytics</h1>
 
+      {/* Offline state */}
+      {!backendOnline && (
+        <div className="text-center py-12">
+          <WifiOff size={40} className="mx-auto mb-3 text-amber-400" />
+          <p className="text-gray-600 font-medium mb-1">Backend Offline</p>
+          <p className="text-sm text-gray-400 max-w-md mx-auto mb-8">
+            Analytics tracks all approved outputs, campaign performance, and agent efficiency.
+            Deploy the backend to see real data.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 text-left">
+              <BarChart2 size={20} className="text-blue-500 mb-2" />
+              <div className="text-sm font-medium text-gray-700">Output Tracking</div>
+              <p className="text-xs text-gray-400 mt-1">Every approved draft with iteration counts</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 text-left">
+              <TrendingUp size={20} className="text-green-500 mb-2" />
+              <div className="text-sm font-medium text-gray-700">Performance Trends</div>
+              <p className="text-xs text-gray-400 mt-1">Approval rates and quality over time</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 text-left">
+              <Target size={20} className="text-purple-500 mb-2" />
+              <div className="text-sm font-medium text-gray-700">Channel Breakdown</div>
+              <p className="text-xs text-gray-400 mt-1">Performance by channel: blog, social, email</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 text-left">
+              <Layers size={20} className="text-amber-500 mb-2" />
+              <div className="text-sm font-medium text-gray-700">Campaign Reports</div>
+              <p className="text-xs text-gray-400 mt-1">Cross-campaign analytics and ROI</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {backendOnline && <>
       {/* Stats bar */}
       {stats && (
         <div className="grid grid-cols-2 gap-4 mb-8">
@@ -88,6 +134,7 @@ export default function AnalyticsPage() {
           </tbody>
         </table>
       </div>
+      </>}
     </div>
   );
 }

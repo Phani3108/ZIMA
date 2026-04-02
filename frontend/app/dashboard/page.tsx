@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   BarChart3, Activity, AlertTriangle, Cpu, TrendingUp,
-  ArrowUpRight, Loader2, RefreshCw, CheckCircle2, XCircle, Clock,
+  ArrowUpRight, Loader2, RefreshCw, CheckCircle2, XCircle, Clock, WifiOff,
 } from "lucide-react";
 import clsx from "clsx";
 import { dashboard } from "@/lib/api";
@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const [agents, setAgents] = useState<AgentInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"overview" | "activity" | "stuck" | "agents">("overview");
+  const [backendOnline, setBackendOnline] = useState(true);
 
   const loadAll = () => {
     setLoading(true);
@@ -63,6 +64,9 @@ export default function DashboardPage() {
       dashboard.stuck().catch(() => []),
       dashboard.agents().catch(() => null),
     ]).then(([s, a, st, ag]) => {
+      if (!s && (!a || a.length === 0) && (!st || st.length === 0) && !ag) {
+        setBackendOnline(false);
+      }
       if (s) setSummary(s);
       setActivity(a || []);
       setStuck(st || []);
@@ -94,6 +98,47 @@ export default function DashboardPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="animate-spin text-gray-400" size={24} />
+        </div>
+      ) : !backendOnline ? (
+        <div className="text-center py-12">
+          <WifiOff size={40} className="mx-auto mb-3 text-amber-400" />
+          <p className="text-gray-600 font-medium mb-1">Backend Offline</p>
+          <p className="text-sm text-gray-400 max-w-md mx-auto mb-8">
+            The dashboard shows real-time workflow health, agent status, and escalations.
+            Deploy the backend to see live data.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
+            <div className="bg-white rounded-xl border p-4 text-left">
+              <BarChart3 size={20} className="text-blue-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Workflow KPIs</h4>
+              <p className="text-xs text-gray-500 mt-1">Active, completed, and completion rates at a glance.</p>
+            </div>
+            <div className="bg-white rounded-xl border p-4 text-left">
+              <Activity size={20} className="text-green-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Activity Feed</h4>
+              <p className="text-xs text-gray-500 mt-1">Real-time stream of agent actions and stage transitions.</p>
+            </div>
+            <div className="bg-white rounded-xl border p-4 text-left">
+              <AlertTriangle size={20} className="text-amber-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Escalations</h4>
+              <p className="text-xs text-gray-500 mt-1">Stuck workflows flagged for human attention.</p>
+            </div>
+            <div className="bg-white rounded-xl border p-4 text-left">
+              <Cpu size={20} className="text-purple-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Agent Health</h4>
+              <p className="text-xs text-gray-500 mt-1">Which AI agents are active, their LLM usage, and status.</p>
+            </div>
+            <div className="bg-white rounded-xl border p-4 text-left">
+              <TrendingUp size={20} className="text-brand mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Trends</h4>
+              <p className="text-xs text-gray-500 mt-1">Quality improvement over time with learning metrics.</p>
+            </div>
+            <div className="bg-white rounded-xl border p-4 text-left">
+              <Clock size={20} className="text-red-500 mb-2" />
+              <h4 className="text-sm font-semibold text-gray-800">Review Queue</h4>
+              <p className="text-xs text-gray-500 mt-1">Stages awaiting human approval or feedback.</p>
+            </div>
+          </div>
         </div>
       ) : (
         <>
