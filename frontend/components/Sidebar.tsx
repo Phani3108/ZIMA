@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  MessageCircle, Settings, Upload, BarChart2, Zap,
+  MessageCircle, Settings, Upload, BarChart2,
   Sparkles, GitBranch, LayoutDashboard, FolderKanban,
   Brain, ListTodo, CalendarClock, FlaskConical,
   DollarSign, Users, ChevronDown,
@@ -106,10 +107,17 @@ export default function Sidebar() {
     <aside className="w-52 bg-white border-r border-gray-200 flex flex-col py-4 px-3 shrink-0">
       {/* Logo */}
       <div className="flex items-center justify-between px-2 mb-6">
-        <div className="flex items-center gap-2">
-          <Zap size={20} className="text-brand" />
+        <Link href="/" className="flex items-center gap-2">
+          <Image
+            src="https://res.cloudinary.com/apideck/image/upload/v1618437828/icons/zeta-tech.jpg"
+            alt="Zeta"
+            width={24}
+            height={24}
+            className="rounded"
+            unoptimized
+          />
           <span className="font-semibold text-gray-800 text-sm">Zeta IMA</span>
-        </div>
+        </Link>
         <NotificationBell />
       </div>
 
@@ -151,7 +159,10 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="text-xs text-gray-300 px-2">v0.7.0</div>
+      <div className="text-[10px] text-gray-300 px-2 leading-relaxed">
+        <div>v0.7.0</div>
+        <div className="mt-1">&copy; 2026 Better World Technology</div>
+      </div>
     </aside>
   );
 }
