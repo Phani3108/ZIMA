@@ -5,7 +5,7 @@ Runs before all other agents to provide grounding context.
 
 from zeta_ima.agents.state import AgentState
 from zeta_ima.config import settings, get_openai_client
-from zeta_ima.memory.brand import _qdrant
+from zeta_ima.infra.vector_store import get_vector_store
 
 
 async def research_node(state: AgentState) -> dict:
@@ -20,13 +20,14 @@ async def research_node(state: AgentState) -> dict:
     vector = resp.data[0].embedding
 
     # Search knowledge_base collection
-    results = _qdrant.search(
+    vs = get_vector_store()
+    results = vs.search(
         collection_name=settings.qdrant_kb_collection,
         query_vector=vector,
         limit=settings.kb_context_top_k,
     )
 
-    kb_context = [r.payload.get("text", "") for r in results if r.payload.get("text")]
+    kb_context = [r.get("text", "") for r in results if r.get("text")]
 
     # Search agency brain (Genesis v2)
     brain_context = []

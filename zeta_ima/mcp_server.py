@@ -162,20 +162,21 @@ async def search_knowledge(
     top_k: int = 5,
 ) -> list[dict]:
     """Search the ingested knowledge base (documents, URLs, Confluence pages) for relevant content."""
-    from zeta_ima.memory.brand import _qdrant, _embed
+    from zeta_ima.memory.brand import _embed
+    from zeta_ima.infra.vector_store import get_vector_store
     from zeta_ima.config import settings
 
     embedding = await _embed(query)
-    hits = _qdrant.search(
+    vs = get_vector_store()
+    hits = vs.search(
         collection_name=settings.qdrant_kb_collection,
         query_vector=embedding,
         limit=top_k,
-        with_payload=True,
     )
     return [
-        {**h.payload, "score": round(h.score, 4)}
+        {**h, "score": round(h.get("_score", 0), 4)}
         for h in hits
-        if h.score >= 0.35
+        if h.get("_score", 0) >= 0.35
     ]
 
 
