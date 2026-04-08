@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Briefcase, BookOpen, Users, MessageSquare, History } from "lucide-react";
 import clsx from "clsx";
+import { useBackend } from "@/lib/useBackend";
+import DemoBanner from "@/components/DemoBanner";
 import { futureAgents } from "@/lib/api";
 
 type Agent = {
@@ -40,25 +42,127 @@ const TABS = [
 
 type Tab = (typeof TABS)[number]["key"];
 
+/* ─── Demo Data ─────────────────────────────────────────────────── */
+
+const DEMO_AGENTS: Record<string, Agent> = {
+  senior_copywriter: {
+    id: "senior_copywriter",
+    title: "Senior Copywriter",
+    department: "content",
+    node_name: "copy",
+    responsibilities: ["Write on-brand marketing copy for all channels", "Adapt tone per platform (LinkedIn formal, Twitter concise, Email warm)", "Incorporate brand voice guidelines from memory", "Iterate on drafts based on reviewer feedback"],
+    expertise: ["LinkedIn posts", "Blog articles", "Email sequences", "Ad copy", "Brand voice adaptation", "CTA optimization"],
+    reports_to: "cmo",
+    interacts_with: ["quality_reviewer", "seo_specialist", "project_manager"],
+    persona_prompt: "You are the Senior Copywriter at Zeta Marketing Agency. You craft compelling, on-brand copy that drives engagement. You always check brand voice guidelines before drafting and adapt your tone to the target platform. Your copy is concise, punchy, and action-oriented.",
+    avatar_emoji: "✍️",
+  },
+  quality_reviewer: {
+    id: "quality_reviewer",
+    title: "Quality Reviewer",
+    department: "content",
+    node_name: "review",
+    responsibilities: ["Score every draft against brand rubric (brand_fit, clarity, cta_strength, tone)", "Run reflection loops to improve quality", "Gate content below threshold score", "Provide actionable improvement suggestions"],
+    expertise: ["Brand consistency scoring", "Tone analysis", "Quality rubric evaluation", "Content governance"],
+    reports_to: "cmo",
+    interacts_with: ["senior_copywriter", "cmo"],
+    persona_prompt: "You are the Quality Reviewer at Zeta Marketing Agency. Your role is to ensure every piece of content meets brand standards. You score on 4 dimensions: brand_fit, clarity, cta_strength, and tone — each out of 10. Content below 7.0 average is sent back for revision.",
+    avatar_emoji: "🔍",
+  },
+  seo_specialist: {
+    id: "seo_specialist",
+    title: "SEO Specialist",
+    department: "strategy",
+    node_name: "seo",
+    responsibilities: ["Analyze keywords for target audience", "Optimize content for search rankings", "Generate meta descriptions and title tags", "Suggest internal linking opportunities"],
+    expertise: ["Keyword research", "On-page SEO", "Content optimization", "Search intent analysis", "Meta tag generation"],
+    reports_to: "cmo",
+    interacts_with: ["senior_copywriter", "research_analyst"],
+    persona_prompt: "You are the SEO Specialist at Zeta Marketing Agency. You optimize every piece of content for maximum search visibility while maintaining readability and brand voice. You balance keyword density with natural language.",
+    avatar_emoji: "📈",
+  },
+};
+
+const DEMO_JOBS: Job[] = [
+  {
+    id: "job-1",
+    brief: "LinkedIn post about Q2 product launch",
+    output_text: "🚀 Big news from the team! After months of R&D, we're thrilled to announce the launch of our AI-powered campaign builder. It writes, reviews, and optimizes your campaigns automatically...",
+    review_scores: { brand_fit: 9, clarity: 8, cta_strength: 7, tone: 8 },
+    created_at: "2026-04-07T14:30:00Z",
+    status: "approved",
+    task_template_id: "linkedin_post",
+  },
+  {
+    id: "job-2",
+    brief: "Series A funding announcement",
+    output_text: "We're excited to share that Zeta has raised $12M in Series A funding led by Acme Ventures. This milestone fuels our mission to make AI-powered marketing accessible to every team...",
+    review_scores: { brand_fit: 9, clarity: 9, cta_strength: 8, tone: 9 },
+    created_at: "2026-04-05T09:15:00Z",
+    status: "approved",
+    task_template_id: "linkedin_post",
+  },
+  {
+    id: "job-3",
+    brief: "Blog post: 5 ways AI changes content marketing",
+    output_text: "Content marketing is evolving rapidly. AI agents are transforming how teams ideate, draft, review, and optimize content. Here are 5 ways this technology is reshaping the landscape...",
+    review_scores: { brand_fit: 8, clarity: 9, cta_strength: 6, tone: 8 },
+    created_at: "2026-04-03T11:00:00Z",
+    status: "approved",
+    task_template_id: "blog_post",
+  },
+  {
+    id: "job-4",
+    brief: "Email welcome sequence for trial users",
+    output_text: "Subject: Welcome to Zeta — let's get you started\n\nHi {{first_name}},\n\nWelcome aboard! You've just unlocked access to an entire AI marketing agency...",
+    review_scores: { brand_fit: 7, clarity: 8, cta_strength: 9, tone: 7 },
+    created_at: "2026-04-01T16:45:00Z",
+    status: "approved",
+    task_template_id: "email_sequence",
+  },
+  {
+    id: "job-5",
+    brief: "Ad copy for Google Search — campaign builder",
+    output_text: "AI Marketing That Works | Zeta\nAutomate campaigns from brief to publish. AI agents write, review & optimize.\nStart Free Trial →",
+    review_scores: { brand_fit: 8, clarity: 9, cta_strength: 9, tone: 7 },
+    created_at: "2026-03-28T10:00:00Z",
+    status: "approved",
+    task_template_id: "ad_copy",
+  },
+];
+
+/* ─── Component ─────────────────────────────────────────────────── */
+
 export default function AgentProfilePage() {
   const params = useParams<{ name: string }>();
+  const { online } = useBackend();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [tab, setTab] = useState<Tab>("profile");
   const [jobScope, setJobScope] = useState<"user" | "org">("user");
 
-  useEffect(() => {
-    if (!params.name) return;
-    futureAgents.get(params.name).then(setAgent).catch(() => {});
-  }, [params.name]);
+  const showDemo = !online;
 
   useEffect(() => {
     if (!params.name) return;
-    futureAgents
-      .jobs(params.name, jobScope)
-      .then(setJobs)
-      .catch(() => {});
-  }, [params.name, jobScope]);
+
+    if (online) {
+      futureAgents.get(params.name).then(setAgent).catch(() => {});
+    } else {
+      // Fallback to demo data
+      setAgent(DEMO_AGENTS[params.name] || DEMO_AGENTS.senior_copywriter);
+    }
+  }, [params.name, online]);
+
+  useEffect(() => {
+    if (!params.name) return;
+
+    if (online) {
+      futureAgents.jobs(params.name, jobScope).then(setJobs).catch(() => {});
+    } else {
+      setJobs(DEMO_JOBS);
+    }
+  }, [params.name, jobScope, online]);
 
   if (!agent) {
     return (
@@ -69,7 +173,7 @@ export default function AgentProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="max-w-4xl mx-auto px-6 py-8">
       {/* Back link */}
       <Link
         href="/future/agents"
@@ -82,7 +186,7 @@ export default function AgentProfilePage() {
       <div className="flex items-start gap-4 mb-6">
         <span className="text-4xl">{agent.avatar_emoji}</span>
         <div>
-          <h1 className="text-xl font-semibold text-gray-800">{agent.title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{agent.title}</h1>
           <div className="text-sm text-gray-500 capitalize">
             {agent.department} • Node: <code className="text-xs bg-gray-100 px-1 rounded">{agent.node_name}</code>
           </div>
@@ -93,6 +197,13 @@ export default function AgentProfilePage() {
           )}
         </div>
       </div>
+
+      {showDemo && (
+        <DemoBanner
+          feature="Agent Profile"
+          compact
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b mb-4">
@@ -174,7 +285,7 @@ export default function AgentProfilePage() {
                       </span>
                       <span
                         className={clsx(
-                          "text-xs px-2 py-0.5 rounded-full",
+                          "text-xs px-2 py-0.5 rounded-full ml-2",
                           job.status === "approved"
                             ? "bg-green-100 text-green-700"
                             : "bg-gray-100 text-gray-500"
@@ -204,6 +315,12 @@ export default function AgentProfilePage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {showDemo && (
+              <p className="text-[10px] text-gray-400 text-center mt-4">
+                Mock data — will be replaced with real job history once content is generated.
+              </p>
             )}
           </div>
         )}

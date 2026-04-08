@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Loader2, CheckCircle, XCircle, Bot, User, ListChecks } from "lucide-react";
+import { Send, Loader2, CheckCircle, XCircle, Bot, User, ListChecks, MessageSquare, Sparkles, GitBranch } from "lucide-react";
 import clsx from "clsx";
 import { useBackend } from "@/lib/useBackend";
-import OfflineBanner from "@/components/OfflineBanner";
+import DemoBanner from "@/components/DemoBanner";
 import ExecutionCard from "@/components/future/ExecutionCard";
 import JobHistoryPanel from "@/components/future/JobHistoryPanel";
 import { futureTemplates } from "@/lib/api";
@@ -42,6 +42,79 @@ type Message =
 type Template = { id: string; name: string; icon: string; description: string };
 
 const API_WS = process.env.NEXT_PUBLIC_API_URL?.replace("http", "ws") || "ws://localhost:8000";
+
+/* ─── Demo Data ─────────────────────────────────────────────────── */
+
+const DEMO_TEMPLATES = [
+  { id: "linkedin_post", name: "LinkedIn Post", icon: "💼", description: "Professional LinkedIn content" },
+  { id: "blog_post", name: "Blog Post", icon: "📝", description: "Long-form SEO blog article" },
+  { id: "campaign_copy", name: "Campaign Copy", icon: "📣", description: "Full campaign with visuals" },
+  { id: "seo_article", name: "SEO Article", icon: "🔍", description: "Search-optimized content" },
+  { id: "email_sequence", name: "Email Sequence", icon: "📧", description: "Multi-touch email flow" },
+  { id: "ad_copy", name: "Ad Copy", icon: "🎯", description: "Paid ad creative" },
+];
+
+const DEMO_PIPELINE = [
+  { name: "Research", agent: "research", description: "Search knowledge base", is_human_gate: false },
+  { name: "Draft Copy", agent: "copy", description: "Generate content", is_human_gate: false },
+  { name: "Quality Review", agent: "review", description: "Score against rubric", is_human_gate: false },
+  { name: "Manager Approval", agent: "approval", description: "Route to team lead", is_human_gate: true },
+  { name: "SEO Optimize", agent: "seo", description: "Keyword optimization", is_human_gate: false },
+];
+
+const DEMO_STEPS: Record<string, AgentStep[]> = {
+  research: [
+    { from: "research", step_name: "Searching knowledge base", step_index: 0, total_steps: 3, status: "completed" },
+    { from: "research", step_name: "Searching agency brain", step_index: 1, total_steps: 3, status: "completed" },
+    { from: "research", step_name: "Research complete", step_index: 2, total_steps: 3, status: "completed" },
+  ],
+  copy: [
+    { from: "copy", step_name: "Loading brand context", step_index: 0, total_steps: 5, status: "completed" },
+    { from: "copy", step_name: "Fetching learning guidance", step_index: 1, total_steps: 5, status: "completed" },
+    { from: "copy", step_name: "Reading PM handoff", step_index: 2, total_steps: 5, status: "completed" },
+    { from: "copy", step_name: "Generating draft", step_index: 3, total_steps: 5, status: "completed", preview: "🚀 Exciting news! We've raised..." },
+    { from: "copy", step_name: "Draft complete", step_index: 4, total_steps: 5, status: "completed" },
+  ],
+  review: [
+    { from: "review", step_name: "Running reflection loop", step_index: 0, total_steps: 4, status: "completed" },
+    { from: "review", step_name: "Scoring against rubric", step_index: 1, total_steps: 4, status: "completed" },
+    { from: "review", step_name: "Checking auto-approval", step_index: 2, total_steps: 4, status: "started" },
+  ],
+};
+
+const DEMO_SUGGESTIONS: Suggestion[] = [
+  {
+    id: "demo-1",
+    brief: "LinkedIn post about Q2 product launch",
+    output_text: "🚀 Big news from the team! After months of development, we're thrilled to announce the launch of our AI-powered campaign builder...",
+    review_scores: { brand_fit: 9, clarity: 8, cta_strength: 7 },
+    created_at: "2026-04-06T14:30:00Z",
+    status: "approved",
+  },
+  {
+    id: "demo-2",
+    brief: "Series A funding announcement post",
+    output_text: "We're excited to share that we've raised $12M in Series A funding led by Acme Ventures. This milestone fuels our mission...",
+    review_scores: { brand_fit: 9, clarity: 9, cta_strength: 8 },
+    created_at: "2026-04-04T09:15:00Z",
+    status: "approved",
+  },
+];
+
+const DEMO_MESSAGES: Message[] = [
+  { role: "user", content: "Write a LinkedIn post about our Series A funding of $12M" },
+  { role: "assistant", content: "Analysing brief and pulling brand context...", type: "thinking" },
+  {
+    role: "draft",
+    draft: "🚀 Exciting news! We've raised $12M in Series A funding led by Acme Ventures.\n\nThis milestone means we can double down on our mission: making AI-powered marketing accessible to every team.\n\nWhat's next:\n→ Expanding our agent platform\n→ Hiring across engineering & GTM\n→ Launching 3 new integrations\n\nThank you to our customers, team, and investors who believe in the future of autonomous marketing.\n\n#SeriesA #MarTech #AI",
+    review: { brand_fit: 9, clarity: 8, cta_strength: 7, tone: 8 },
+    iteration: 1,
+    brief: "Write a LinkedIn post about our Series A funding of $12M",
+    approver: "Mithun",
+  },
+];
+
+/* ─── Component ─────────────────────────────────────────────────── */
 
 export default function FutureChatPage() {
   const { online, checking } = useBackend();
@@ -99,7 +172,6 @@ export default function FutureChatPage() {
         setAgentSteps((prev) => {
           const key = data.from;
           const existing = prev[key] || [];
-          // Update existing step or add new
           const idx = existing.findIndex(
             (s) => s.step_index === data.step_index && s.step_name === data.step_name
           );
@@ -182,27 +254,77 @@ export default function FutureChatPage() {
       </div>
     );
 
+  /* ── Use demo data when backend is offline ── */
+  const showDemo = !online;
+  const displayTemplates = showDemo ? DEMO_TEMPLATES : templates;
+  const displayMessages = showDemo ? DEMO_MESSAGES : messages;
+  const displayPipeline = showDemo ? DEMO_PIPELINE : pipelineSteps;
+  const displaySteps = showDemo ? DEMO_STEPS : agentSteps;
+  const displaySuggestions = showDemo ? DEMO_SUGGESTIONS : suggestions;
+  const displayActiveAgent = showDemo ? "review" : activeAgent;
+
   return (
     <div className="flex h-full">
       {/* Main Chat */}
       <div className="flex-1 flex flex-col max-w-3xl mx-auto px-4 py-6">
-        <h1 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <h1 className="text-xl font-semibold text-gray-800 mb-1 flex items-center gap-2">
           <ListChecks className="w-5 h-5" />
           Future Chat
         </h1>
+        <p className="text-sm text-gray-500 mb-4">
+          Chat with AI agents and watch every step of the content pipeline in real time.
+        </p>
+
+        {showDemo && (
+          <DemoBanner
+            feature="Future Chat"
+            steps={[
+              "Start the backend — docker compose up (Redis, Qdrant, PostgreSQL)",
+              "Pick a task template like \"LinkedIn Post\" and type a brief",
+              "Watch agents work step-by-step, then approve or reject the draft",
+            ]}
+          />
+        )}
+
+        {/* Stats row */}
+        {showDemo && (
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-white border rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <MessageSquare size={13} className="text-gray-400" />
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Templates</span>
+              </div>
+              <div className="text-xl font-bold text-blue-600">7</div>
+            </div>
+            <div className="bg-white border rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <GitBranch size={13} className="text-gray-400" />
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Pipeline Steps</span>
+              </div>
+              <div className="text-xl font-bold text-purple-600">5</div>
+            </div>
+            <div className="bg-white border rounded-xl p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sparkles size={13} className="text-gray-400" />
+                <span className="text-[11px] text-gray-500 uppercase tracking-wider">Suggestions</span>
+              </div>
+              <div className="text-xl font-bold text-amber-600">2</div>
+            </div>
+          </div>
+        )}
 
         {/* Template Picker */}
-        {templates.length > 0 && (
+        {displayTemplates.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-4">
-            {templates.map((t) => (
+            {displayTemplates.map((t) => (
               <button
                 key={t.id}
                 onClick={() =>
-                  setSelectedTemplate((prev) => (prev === t.id ? null : t.id))
+                  showDemo ? null : setSelectedTemplate((prev) => (prev === t.id ? null : t.id))
                 }
                 className={clsx(
                   "text-xs px-3 py-1.5 rounded-full border transition-colors",
-                  selectedTemplate === t.id
+                  (showDemo && t.id === "linkedin_post") || selectedTemplate === t.id
                     ? "bg-blue-600 text-white border-blue-600"
                     : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
                 )}
@@ -214,30 +336,32 @@ export default function FutureChatPage() {
         )}
 
         {/* Job Suggestions */}
-        {showSuggestions && suggestions.length > 0 && (
+        {showSuggestions && displaySuggestions.length > 0 && (
           <JobHistoryPanel
-            suggestions={suggestions}
+            suggestions={displaySuggestions}
             onUse={(id) => {
+              if (showDemo) return;
               setPriorJobId(id);
               setShowSuggestions(false);
             }}
             onEdit={(id) => {
+              if (showDemo) return;
               setPriorJobId(id);
               setShowSuggestions(false);
             }}
-            onDismiss={() => setShowSuggestions(false)}
+            onDismiss={() => showDemo ? null : setShowSuggestions(false)}
           />
         )}
 
         {/* Pipeline Progress Banner */}
-        {pipelineSteps.length > 0 && (
+        {displayPipeline.length > 0 && (
           <div className="bg-gray-50 border rounded-lg p-3 mb-4">
             <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
               Pipeline
             </div>
             <div className="flex gap-1 items-center flex-wrap">
-              {pipelineSteps.map((step, i) => {
-                const stepDone = agentSteps[step.agent]?.some(
+              {displayPipeline.map((step, i) => {
+                const stepDone = displaySteps[step.agent]?.some(
                   (s) => s.status === "completed"
                 );
                 return (
@@ -248,7 +372,7 @@ export default function FutureChatPage() {
                         "text-xs px-2 py-0.5 rounded-full",
                         stepDone
                           ? "bg-green-100 text-green-700"
-                          : activeAgent === step.agent
+                          : displayActiveAgent === step.agent
                           ? "bg-blue-100 text-blue-700 font-medium"
                           : "bg-gray-100 text-gray-500"
                       )}
@@ -265,7 +389,7 @@ export default function FutureChatPage() {
 
         {/* Messages */}
         <div className="flex-1 space-y-3 overflow-y-auto pb-4">
-          {messages.map((msg, i) => {
+          {displayMessages.map((msg, i) => {
             if (msg.role === "user") {
               return (
                 <div key={i} className="flex justify-end">
@@ -304,16 +428,19 @@ export default function FutureChatPage() {
                       onChange={(e) => setComment(e.target.value)}
                       placeholder="Optional feedback..."
                       className="flex-1 text-sm border rounded px-2 py-1"
+                      disabled={showDemo}
                     />
                     <button
                       onClick={() => decide("approve")}
-                      className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                      disabled={showDemo}
+                      className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50"
                     >
                       <CheckCircle className="w-4 h-4" /> Approve
                     </button>
                     <button
                       onClick={() => decide("reject")}
-                      className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600"
+                      disabled={showDemo}
+                      className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 disabled:opacity-50"
                     >
                       <XCircle className="w-4 h-4" /> Reject
                     </button>
@@ -355,11 +482,11 @@ export default function FutureChatPage() {
                 : "Type a marketing brief..."
             }
             className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            disabled={loading || !online}
+            disabled={loading || showDemo}
           />
           <button
             onClick={send}
-            disabled={loading || !input.trim() || !online}
+            disabled={loading || !input.trim() || showDemo}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -368,17 +495,17 @@ export default function FutureChatPage() {
       </div>
 
       {/* Execution Sidebar */}
-      {Object.keys(agentSteps).length > 0 && (
+      {Object.keys(displaySteps).length > 0 && (
         <div className="w-72 border-l bg-gray-50 p-3 overflow-y-auto hidden lg:block">
           <div className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">
             Agent Activity
           </div>
-          {Object.entries(agentSteps).map(([agent, steps]) => (
+          {Object.entries(displaySteps).map(([agent, steps]) => (
             <ExecutionCard
               key={agent}
               agentName={agent}
               steps={steps}
-              isActive={activeAgent === agent}
+              isActive={displayActiveAgent === agent}
             />
           ))}
         </div>

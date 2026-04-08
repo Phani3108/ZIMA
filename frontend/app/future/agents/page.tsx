@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Search, Briefcase } from "lucide-react";
+import { Users, Search, Briefcase, Bot, FileText, Star } from "lucide-react";
 import clsx from "clsx";
+import { useBackend } from "@/lib/useBackend";
+import DemoBanner from "@/components/DemoBanner";
 import { futureAgents } from "@/lib/api";
 
 type Agent = {
@@ -23,18 +25,100 @@ const DEPT_COLORS: Record<string, string> = {
   operations: "bg-amber-100 text-amber-700",
 };
 
+/* ─── Demo Data ─────────────────────────────────────────────────── */
+
+const DEMO_AGENTS: Agent[] = [
+  {
+    id: "senior_copywriter",
+    title: "Senior Copywriter",
+    department: "content",
+    node_name: "copy",
+    responsibilities: ["Write on-brand marketing copy", "Adapt tone per channel", "Incorporate brand voice guidelines"],
+    expertise: ["LinkedIn posts", "Blog articles", "Email sequences", "Ad copy"],
+    avatar_emoji: "✍️",
+  },
+  {
+    id: "quality_reviewer",
+    title: "Quality Reviewer",
+    department: "content",
+    node_name: "review",
+    responsibilities: ["Score drafts against brand rubric", "Check clarity and CTA strength", "Gate content quality"],
+    expertise: ["Brand consistency", "Tone analysis", "Quality scoring"],
+    avatar_emoji: "🔍",
+  },
+  {
+    id: "seo_specialist",
+    title: "SEO Specialist",
+    department: "strategy",
+    node_name: "seo",
+    responsibilities: ["Optimize content for search", "Keyword analysis", "Meta tag generation"],
+    expertise: ["Keyword research", "On-page SEO", "Content optimization"],
+    avatar_emoji: "📈",
+  },
+  {
+    id: "research_analyst",
+    title: "Research Analyst",
+    department: "strategy",
+    node_name: "research",
+    responsibilities: ["Search knowledge base", "Gather market intelligence", "Provide context for briefs"],
+    expertise: ["Market research", "Competitive analysis", "Data synthesis"],
+    avatar_emoji: "🔬",
+  },
+  {
+    id: "project_manager",
+    title: "Project Manager",
+    department: "operations",
+    node_name: "pm",
+    responsibilities: ["Decompose briefs into tasks", "Create agent instructions", "Coordinate pipeline"],
+    expertise: ["Task decomposition", "Brief analysis", "Workflow orchestration"],
+    avatar_emoji: "📋",
+  },
+  {
+    id: "creative_director",
+    title: "Creative Director",
+    department: "design",
+    node_name: "design",
+    responsibilities: ["Generate visual concepts", "Create design briefs", "Maintain visual brand"],
+    expertise: ["Visual identity", "Layout design", "Brand imagery"],
+    avatar_emoji: "🎨",
+  },
+  {
+    id: "competitive_analyst",
+    title: "Competitive Intelligence Analyst",
+    department: "strategy",
+    node_name: "competitive_intel",
+    responsibilities: ["Monitor competitor activity", "Analyze market positioning", "Identify opportunities"],
+    expertise: ["Competitive analysis", "Market trends", "SWOT analysis"],
+    avatar_emoji: "🕵️",
+  },
+  {
+    id: "cmo",
+    title: "Chief Marketing Officer",
+    department: "operations",
+    node_name: "approval",
+    responsibilities: ["Final content approval", "Brand strategy oversight", "Quality gate decisions"],
+    expertise: ["Brand strategy", "Marketing leadership", "Content governance"],
+    avatar_emoji: "👔",
+  },
+];
+
 export default function FutureAgentsPage() {
+  const { online } = useBackend();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState<string | null>(null);
 
   useEffect(() => {
-    futureAgents.list().then(setAgents).catch(() => {});
-  }, []);
+    if (online) {
+      futureAgents.list().then(setAgents).catch(() => {});
+    }
+  }, [online]);
 
-  const departments = [...new Set(agents.map((a) => a.department))];
+  const showDemo = !online || agents.length === 0;
+  const displayAgents = showDemo ? DEMO_AGENTS : agents;
+  const departments = [...new Set(displayAgents.map((a) => a.department))];
 
-  const filtered = agents.filter((a) => {
+  const filtered = displayAgents.filter((a) => {
     if (deptFilter && a.department !== deptFilter) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -47,14 +131,59 @@ export default function FutureAgentsPage() {
   });
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <h1 className="text-xl font-semibold text-gray-800 mb-1 flex items-center gap-2">
+    <div className="max-w-5xl mx-auto px-6 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
         <Users className="w-5 h-5" />
         Agent Directory
       </h1>
-      <p className="text-sm text-gray-500 mb-6">
-        Meet your agency team. Click any agent to view their full profile and job history.
+      <p className="text-gray-500 mt-1 text-sm mb-6">
+        Meet your AI marketing agency team — each agent has a clear role, expertise, and job history.
       </p>
+
+      {showDemo && (
+        <DemoBanner
+          feature="Agent Directory"
+          steps={[
+            "Start the backend — agents are loaded from the agency_manifest.yaml",
+            "Click any agent to see their full profile, system prompt, and job history",
+            "Use the scope toggle on Job History to switch between personal and org-wide view",
+          ]}
+        />
+      )}
+
+      {/* Stats */}
+      {showDemo && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white border rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Bot size={13} className="text-gray-400" />
+              <span className="text-[11px] text-gray-500 uppercase tracking-wider">Total Agents</span>
+            </div>
+            <div className="text-xl font-bold text-blue-600">{DEMO_AGENTS.length}</div>
+          </div>
+          <div className="bg-white border rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Briefcase size={13} className="text-gray-400" />
+              <span className="text-[11px] text-gray-500 uppercase tracking-wider">Departments</span>
+            </div>
+            <div className="text-xl font-bold text-purple-600">4</div>
+          </div>
+          <div className="bg-white border rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <FileText size={13} className="text-gray-400" />
+              <span className="text-[11px] text-gray-500 uppercase tracking-wider">Jobs Completed</span>
+            </div>
+            <div className="text-xl font-bold text-green-600">142</div>
+          </div>
+          <div className="bg-white border rounded-xl p-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Star size={13} className="text-gray-400" />
+              <span className="text-[11px] text-gray-500 uppercase tracking-wider">Avg Quality</span>
+            </div>
+            <div className="text-xl font-bold text-amber-600">8.4/10</div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 items-center mb-6 flex-wrap">
@@ -141,6 +270,12 @@ export default function FutureAgentsPage() {
           <Briefcase className="w-8 h-8 mx-auto mb-2" />
           <div>No agents found.</div>
         </div>
+      )}
+
+      {showDemo && (
+        <p className="text-[10px] text-gray-400 text-center mt-6">
+          Mock data — will be replaced with real agent profiles once the backend is connected.
+        </p>
       )}
     </div>
   );
