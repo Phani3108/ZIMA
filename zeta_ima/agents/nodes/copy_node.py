@@ -17,7 +17,7 @@ from zeta_ima.agents.state import AgentState
 from zeta_ima.agents.roles import role_registry
 from zeta_ima.config import settings, get_openai_client
 from zeta_ima.memory.brand import search_brand_examples
-from zeta_ima.orchestrator.a2a import AgentMessage, emit, get_latest_handoff, build_context_from_messages
+from zeta_ima.orchestrator.a2a import AgentMessage, emit, emit_step, get_latest_handoff, build_context_from_messages
 
 log = logging.getLogger(__name__)
 
@@ -57,11 +57,15 @@ async def _compress_history(messages: list, client) -> list:
 async def copy_node(state: AgentState) -> dict:
     """Generate a copy draft using GPT-4o + brand context + learning guidance + A2A context."""
     client = get_openai_client()
+    agent_messages = list(state.get("agent_messages", []))
 
-    # 1. Brand context from long-term memory
+    # Step 1/5: Brand context from long-term memory
+    agent_messages.append(emit_step("copy", "Loading brand context", 0, 5, "started").to_dict())
     brand_examples = await search_brand_examples(state["current_brief"])
+    agent_messages.append(emit_step("copy", "Loading brand context", 0, 5, "completed", f"Found {len(brand_examples)} brand examples").to_dict())
 
-    # 2. Learning guidance (common edits, rejection patterns, directional signals)
+    # Step 2/5: Learning guidance (common edits, rejection patterns, directional signals)
+    agent_messages.append(emit_step("copy", "Fetching learning guidance", 1, 5, "started").to_dict())
     learning_block = ""
     try:
         from zeta_ima.memory.learning import get_learning_guidance
@@ -71,10 +75,11 @@ async def copy_node(state: AgentState) -> dict:
         )
     except Exception as e:
         log.debug("Learning guidance unavailable: %s", e)
+    agent_messages.append(emit_step("copy", "Fetching learning guidance", 1, 5, "completed", "Guidance loaded" if learning_block else "No prior guidance").to_dict())
 
-    # 3. A2A handoff instructions from PM
+    # Step 3/5: A2A handoff instructions from PM
+    agent_messages.append(emit_step("copy", "Reading PM handoff", 2, 5, "started").to_dict())
     a2a_context = ""
-    agent_messages = list(state.get("agent_messages", []))
     handoff = get_latest_handoff(agent_messages, "copy")
     if handoff and handoff.handoff_instructions:
         a2a_context = f"\n\nPM INSTRUCTIONS:\n{handoff.handoff_instructions}"
@@ -82,8 +87,10 @@ async def copy_node(state: AgentState) -> dict:
         a2a_context_text = build_context_from_messages(agent_messages)
         if a2a_context_text:
             a2a_context = f"\n\nPIPELINE CONTEXT:\n{a2a_context_text}"
+    agent_messages.append(emit_step("copy", "Reading PM handoff", 2, 5, "completed", "PM instructions loaded" if a2a_context else "No PM context").to_dict())
 
-    # 4. Compress history if needed
+    # Step 4/5: Compress history if needed
+    agent_messages.append(emit_step("copy", "Generating draft", 3, 5, "started").to_dict())
     history = await _compress_history(list(state.get("messages", [])), client)
 
     # 5. Build messages for GPT-4o
@@ -127,6 +134,10 @@ async def copy_node(state: AgentState) -> dict:
     )
     draft_text = resp.choices[0].message.content
     iteration = state.get("iteration_count", 0) + 1
+    agent_messages.append(emit_step("copy", "Generating draft", 3, 5, "completed", f"Draft #{iteration} generated ({len(draft_text or '')} chars)").to_dict())
+
+    # Step 5/5: Draft complete
+    agent_messages.append(emit_step("copy", "Draft complete", 4, 5, "completed", f"Iteration {iteration}").to_dict())
 
     # 7. A2A: send response to next agent in pipeline
     agent_messages.append(emit(

@@ -252,3 +252,37 @@ async def advance_current_stage(workflow_id: str) -> None:
                 )
             )
         await session.commit()
+
+
+async def list_pending_approvals(approver_id: str) -> list[dict]:
+    """Return all workflow stages in awaiting_review status for a given approver.
+
+    We match by checking if the workflow's created_by is the approver,
+    or if the stage owner field matches.  In practice the approval_node
+    sets stage.owner to the resolved approver_user_id.
+    """
+    async with _Session() as session:
+        stmt = (
+            select(workflow_stages, workflows.c.name.label("workflow_name"), workflows.c.created_by)
+            .join(workflows, workflows.c.id == workflow_stages.c.workflow_id)
+            .where(workflow_stages.c.status == "awaiting_review")
+            .where(
+                (workflow_stages.c.owner == approver_id) | (workflows.c.created_by == approver_id)
+            )
+            .order_by(workflow_stages.c.started_at.desc())
+        )
+        rows = (await session.execute(stmt)).fetchall()
+        return [
+            {
+                "stage_id": r.id,
+                "workflow_id": r.workflow_id,
+                "workflow_name": r.workflow_name,
+                "stage_name": r.name,
+                "agent_name": r.agent_name,
+                "status": r.status,
+                "output": r.output,
+                "preview_type": r.preview_type,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+            }
+            for r in rows
+        ]

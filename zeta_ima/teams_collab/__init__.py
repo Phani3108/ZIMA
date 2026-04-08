@@ -70,6 +70,21 @@ team_members = Table(
     UniqueConstraint("team_id", "user_id", name="uq_team_user"),
 )
 
+team_approval_routing = Table(
+    "team_approval_routing",
+    _metadata,
+    Column("id", String, primary_key=True),
+    Column("team_id", String, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False),
+    Column("agent_type", String, nullable=False),
+    Column("approver_user_id", String, nullable=False),
+    Column("approver_display_name", String, default=""),
+    Column("approver_email", String, default=""),
+    Column("fallback_approver_user_id", String, default=""),
+    Column("created_at", DateTime),
+    Column("updated_at", DateTime),
+    UniqueConstraint("team_id", "agent_type", name="uq_team_agent_approval"),
+)
+
 
 async def init_teams_db() -> None:
     """Create team tables."""
@@ -266,6 +281,83 @@ class TeamsService:
             )
             row = result.fetchone()
             return row is not None and row.role in ("admin", "manager")
+
+    # ── Approval Routing (Future) ─────────────────────────────────────
+
+    async def set_approval_routing(
+        self,
+        team_id: str,
+        agent_type: str,
+        approver_user_id: str,
+        approver_display_name: str = "",
+        approver_email: str = "",
+        fallback_approver_user_id: str | None = None,
+    ) -> dict:
+        """Set or update the approval routing for a team + agent type."""
+        now = datetime.now(timezone.utc)
+        async with _Session() as session:
+            # Upsert: delete existing, then insert
+            await session.execute(
+                delete(team_approval_routing).where(
+                    team_approval_routing.c.team_id == team_id,
+                    team_approval_routing.c.agent_type == agent_type,
+                )
+            )
+            row_id = str(uuid.uuid4())
+            await session.execute(
+                team_approval_routing.insert().values(
+                    id=row_id,
+                    team_id=team_id,
+                    agent_type=agent_type,
+                    approver_user_id=approver_user_id,
+                    approver_display_name=approver_display_name,
+                    approver_email=approver_email,
+                    fallback_approver_user_id=fallback_approver_user_id or "",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.commit()
+        return {
+            "team_id": team_id,
+            "agent_type": agent_type,
+            "approver_user_id": approver_user_id,
+            "approver_display_name": approver_display_name,
+        }
+
+    async def get_approver(self, team_id: str, agent_type: str) -> dict | None:
+        """Get the configured approver for a team + agent type."""
+        async with _Session() as session:
+            result = await session.execute(
+                select(team_approval_routing).where(
+                    team_approval_routing.c.team_id == team_id,
+                    team_approval_routing.c.agent_type == agent_type,
+                )
+            )
+            row = result.fetchone()
+            return dict(row._mapping) if row else None
+
+    async def list_approval_routing(self, team_id: str) -> list[dict]:
+        """List all approval routing rules for a team."""
+        async with _Session() as session:
+            result = await session.execute(
+                select(team_approval_routing)
+                .where(team_approval_routing.c.team_id == team_id)
+                .order_by(team_approval_routing.c.agent_type)
+            )
+            return [dict(r._mapping) for r in result.fetchall()]
+
+    async def delete_approval_routing(self, team_id: str, agent_type: str) -> bool:
+        """Remove approval routing for a team + agent type."""
+        async with _Session() as session:
+            result = await session.execute(
+                delete(team_approval_routing).where(
+                    team_approval_routing.c.team_id == team_id,
+                    team_approval_routing.c.agent_type == agent_type,
+                )
+            )
+            await session.commit()
+            return result.rowcount > 0
 
 
 teams_service = TeamsService()

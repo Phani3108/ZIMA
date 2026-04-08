@@ -9,7 +9,7 @@ import {
   Sparkles, GitBranch, LayoutDashboard, FolderKanban,
   Brain, ListTodo, CalendarClock, FlaskConical,
   DollarSign, Users, ChevronDown, Archive,
-  MessageSquare, Share2,
+  MessageSquare, Share2, Rocket, Shield, UserCircle,
 } from "lucide-react";
 import clsx from "clsx";
 import NotificationBell from "@/components/NotificationBell";
@@ -26,6 +26,15 @@ const TOP_NAV: NavItem[] = [
 ];
 
 const GROUPS: NavGroup[] = [
+  {
+    key: "future",
+    label: "Future",
+    items: [
+      { href: "/future/chat",      label: "Future Chat",   icon: Rocket },
+      { href: "/future/agents",    label: "Agents",        icon: UserCircle },
+      { href: "/future/approvals", label: "Approvals",     icon: Shield },
+    ],
+  },
   {
     key: "build",
     label: "Build",

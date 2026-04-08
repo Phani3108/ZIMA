@@ -47,6 +47,11 @@ from zeta_ima.api.routes.scores import router as scores_router
 from zeta_ima.api.routes.prompts import router as prompts_router
 from zeta_ima.api.routes.artifacts import router as artifacts_router
 from zeta_ima.api.routes.handoffs import router as handoffs_router
+# Future section routes
+from zeta_ima.api.routes.future_chat import router as future_chat_router
+from zeta_ima.api.routes.future_templates import router as future_templates_router
+from zeta_ima.api.routes.future_agents import router as future_agents_router
+from zeta_ima.api.routes.future_approvals import router as future_approvals_router
 from zeta_ima.memory.brand import ensure_collection
 from zeta_ima.memory.campaign import init_db
 from zeta_ima.ingest.pipeline import init_ingest_db
@@ -258,6 +263,14 @@ def create_app() -> FastAPI:
             import logging
             logging.getLogger(__name__).warning(f"Handoffs DB init: {e}")
 
+        # Future section DB tables
+        try:
+            from zeta_ima.memory.job_history import job_history
+            await job_history.init()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Job history DB init: {e}")
+
     # Teams bot webhook (no auth — authenticated by Bot Framework)
     app.include_router(activity_router)
 
@@ -300,6 +313,12 @@ def create_app() -> FastAPI:
 
     # WebSocket endpoints
     app.include_router(workflow_ws_router)
+
+    # Future section
+    app.include_router(future_chat_router)
+    app.include_router(future_templates_router)
+    app.include_router(future_agents_router)
+    app.include_router(future_approvals_router)
 
     return app
 

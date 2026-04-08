@@ -14,7 +14,7 @@ from pathlib import Path
 from zeta_ima.agents.state import AgentState
 from zeta_ima.agents.roles import role_registry
 from zeta_ima.config import settings, get_openai_client
-from zeta_ima.orchestrator.a2a import emit, get_latest_handoff
+from zeta_ima.orchestrator.a2a import emit, emit_step, get_latest_handoff
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,9 @@ async def competitive_intel_node(state: AgentState) -> dict:
     client = get_openai_client()
     brief = state.get("current_brief", "")
     agent_messages = list(state.get("agent_messages", []))
+
+    # Step 1/3: Gathering market data
+    agent_messages.append(emit_step("competitive_intel", "Gathering market data", 0, 3, "started").to_dict())
 
     # PM instructions
     handoff = get_latest_handoff(agent_messages, "competitive_intel")
@@ -77,6 +80,10 @@ async def competitive_intel_node(state: AgentState) -> dict:
         f"\n\nBrain Context:\n{brain_block or 'None.'}"
         f"{semrush_data}"
     )
+    agent_messages.append(emit_step("competitive_intel", "Gathering market data", 0, 3, "completed", "Context assembled").to_dict())
+
+    # Step 2/3: Analyzing competitors
+    agent_messages.append(emit_step("competitive_intel", "Analyzing competitors", 1, 3, "started").to_dict())
 
     resp = await client.chat.completions.create(
         model=settings.llm_copy,
@@ -87,6 +94,8 @@ async def competitive_intel_node(state: AgentState) -> dict:
         temperature=0.4,
     )
     intel_output = resp.choices[0].message.content or ""
+    agent_messages.append(emit_step("competitive_intel", "Analyzing competitors", 1, 3, "completed", f"Analysis: {len(intel_output)} chars").to_dict())
+    agent_messages.append(emit_step("competitive_intel", "Analysis complete", 2, 3, "completed").to_dict())
 
     # A2A: emit findings for downstream agents
     next_agent = "pm" if "pm" in state.get("pipeline", []) else "copy"

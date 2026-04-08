@@ -204,12 +204,66 @@ class NotificationService:
 
     async def _send_email(self, user_id: str, title: str, body: str, url: str) -> None:
         try:
-            from zeta_ima.integrations.sendgrid import send_email
-            # In a real setup, user_id would map to an email address
-            # For now, this is a stub
-            log.debug(f"Email notification for {user_id}: {title}")
+            from zeta_ima.config import settings as cfg
+            if not cfg.smtp_host:
+                log.debug("SMTP not configured, skipping email for %s", user_id)
+                return
+
+            # Resolve email: check approval routing metadata or team_members
+            recipient_email = ""
+            try:
+                from zeta_ima.teams_collab import teams_service
+                membership = await teams_service.get_user_membership(user_id)
+                if membership:
+                    recipient_email = membership.get("email", "")
+            except Exception:
+                pass
+
+            if not recipient_email:
+                log.debug("No email found for user %s", user_id)
+                return
+
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = title
+            msg["From"] = cfg.smtp_from_email
+            msg["To"] = recipient_email
+
+            action_link = f'<a href="{cfg.frontend_url}{url}" style="background:#2563eb;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:12px;">View in Zeta IMA</a>' if url else ""
+
+            html = f"""<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+<h2 style="color:#1e293b">{title}</h2>
+<div style="color:#475569;line-height:1.6;white-space:pre-wrap">{body}</div>
+{action_link}
+<hr style="margin-top:24px;border:none;border-top:1px solid #e2e8f0">
+<p style="color:#94a3b8;font-size:12px">Zeta IMA &mdash; AI Marketing Agency</p>
+</div>"""
+
+            msg.attach(MIMEText(body, "plain"))
+            msg.attach(MIMEText(html, "html"))
+
+            # Send in a thread to not block the event loop
+            import asyncio
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._smtp_send, cfg, msg, recipient_email)
+            log.info("Email sent to %s: %s", recipient_email, title)
+
         except Exception as e:
             log.debug(f"Email notification skipped: {e}")
+
+    @staticmethod
+    def _smtp_send(cfg, msg, recipient_email: str) -> None:
+        """Synchronous SMTP send, called via run_in_executor."""
+        import smtplib
+        with smtplib.SMTP(cfg.smtp_host, cfg.smtp_port) as server:
+            if cfg.smtp_use_tls:
+                server.starttls()
+            if cfg.smtp_user:
+                server.login(cfg.smtp_user, cfg.smtp_password)
+            server.sendmail(cfg.smtp_from_email, recipient_email, msg.as_string())
 
 
 # Module-level singleton

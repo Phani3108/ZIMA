@@ -59,6 +59,79 @@ class WorkflowEngine:
             campaign_id=campaign_id,
         )
 
+    async def create_from_task_template(
+        self,
+        task_template_id: str,
+        variables: dict,
+        user_id: str,
+        name: Optional[str] = None,
+        campaign_id: Optional[str] = None,
+        team_id: Optional[str] = None,
+    ) -> dict:
+        """Create a workflow from a task template (Future section)."""
+        from zeta_ima.skills.task_templates import template_registry
+
+        tmpl = template_registry.get(task_template_id)
+        if tmpl is None:
+            raise ValueError(f"Task template '{task_template_id}' not found")
+
+        wf_name = name or tmpl.name
+        stages = []
+        for step in tmpl.steps:
+            stages.append({
+                "name": step.name,
+                "agent_name": step.agent,
+                "skill_id": tmpl.skill_id or task_template_id,
+                "prompt_id": tmpl.prompt_id or "default",
+                "requires_approval": step.is_human_gate,
+                "description": step.description,
+            })
+
+        wf = await create_workflow(
+            name=wf_name,
+            skill_id=tmpl.skill_id or task_template_id,
+            template_id=task_template_id,
+            created_by=user_id,
+            variables={**variables, "task_template_id": task_template_id},
+            stages=stages,
+            campaign_id=campaign_id,
+        )
+
+        # Record which team this belongs to (for approval routing)
+        if team_id:
+            wf["_team_id"] = team_id
+
+        return wf
+
+    async def create_from_suggestion(
+        self,
+        job_id: str,
+        user_id: str,
+        edits: Optional[dict] = None,
+        name: Optional[str] = None,
+    ) -> dict:
+        """Create a workflow pre-filled from a prior job's output."""
+        from zeta_ima.memory.job_history import job_history
+
+        job = await job_history.get_job(job_id)
+        if job is None:
+            raise ValueError(f"Job '{job_id}' not found")
+
+        variables = {
+            "brief": job["brief"],
+            "prior_output": job.get("output_text", ""),
+            "prior_scores": job.get("review_scores", {}),
+        }
+        if edits:
+            variables.update(edits)
+
+        return await self.create_from_task_template(
+            task_template_id=job["task_template_id"],
+            variables=variables,
+            user_id=user_id,
+            name=name or f"Refine: {job['brief'][:60]}",
+        )
+
     async def create_from_skill(
         self,
         skill_id: str,

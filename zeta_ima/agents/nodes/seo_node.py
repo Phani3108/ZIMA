@@ -16,7 +16,7 @@ from pathlib import Path
 from zeta_ima.agents.state import AgentState
 from zeta_ima.agents.roles import role_registry
 from zeta_ima.config import settings, get_openai_client
-from zeta_ima.orchestrator.a2a import emit, get_latest_handoff
+from zeta_ima.orchestrator.a2a import emit, emit_step, get_latest_handoff
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,9 @@ async def seo_node(state: AgentState) -> dict:
     brief = state.get("current_brief", "")
     agent_messages = list(state.get("agent_messages", []))
 
+    # Step 1/3: Keyword analysis
+    agent_messages.append(emit_step("seo", "Keyword analysis", 0, 3, "started").to_dict())
+
     # PM instructions
     handoff = get_latest_handoff(agent_messages, "seo")
     extra = f"\n\nPM Instructions: {handoff.handoff_instructions}" if handoff and handoff.handoff_instructions else ""
@@ -62,7 +65,10 @@ async def seo_node(state: AgentState) -> dict:
     system_prompt = f"{role.system_prompt_prefix()}\n\n{base_prompt}" if role else base_prompt
 
     user_prompt = f"Brief: {brief}{extra}\n\nKB Context:\n{kb_block or 'None.'}{draft_block}"
+    agent_messages.append(emit_step("seo", "Keyword analysis", 0, 3, "completed", "Context gathered").to_dict())
 
+    # Step 2/3: Optimizing content
+    agent_messages.append(emit_step("seo", "Optimizing content", 1, 3, "started").to_dict())
     resp = await client.chat.completions.create(
         model=settings.llm_copy,
         messages=[
@@ -72,6 +78,8 @@ async def seo_node(state: AgentState) -> dict:
         temperature=0.3,
     )
     seo_output = resp.choices[0].message.content or ""
+    agent_messages.append(emit_step("seo", "Optimizing content", 1, 3, "completed", f"SEO analysis: {len(seo_output)} chars").to_dict())
+    agent_messages.append(emit_step("seo", "SEO complete", 2, 3, "completed").to_dict())
 
     # A2A: emit to the next agent
     agent_messages.append(emit(

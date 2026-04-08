@@ -13,7 +13,7 @@ from pathlib import Path
 
 from zeta_ima.agents.state import AgentState
 from zeta_ima.config import settings
-from zeta_ima.orchestrator.a2a import AgentMessage, get_latest_handoff
+from zeta_ima.orchestrator.a2a import AgentMessage, emit_step, get_latest_handoff
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ async def design_node(state: AgentState) -> dict:
     brief = state.get("current_brief", "")
     tool_results = dict(state.get("tool_results", {}))
     agent_messages = list(state.get("agent_messages", []))
+
+    # Step 1/3: Preparing design brief
+    agent_messages.append(emit_step("design", "Preparing design brief", 0, 3, "started").to_dict())
 
     # Check for PM handoff instructions
     handoff = get_latest_handoff(agent_messages, "design")
@@ -47,6 +50,10 @@ async def design_node(state: AgentState) -> dict:
 
     # Use image LLM router (Nano Banana 2 → DALL-E fallback)
     from zeta_ima.agents.llm_router import call_image_llm, LLMError
+    agent_messages.append(emit_step("design", "Preparing design brief", 0, 3, "completed", f"Aspect: {aspect_ratio}").to_dict())
+
+    # Step 2/3: Generating visuals
+    agent_messages.append(emit_step("design", "Generating visuals", 1, 3, "started").to_dict())
 
     # Determine aspect ratio from context
     aspect_ratio = settings.image_default_aspect_ratio
@@ -98,10 +105,14 @@ async def design_node(state: AgentState) -> dict:
             f"[Design] Image generated via {result.provider_used} ({result.model_used}). "
             f"Aspect: {aspect_ratio}, Resolution: {resolution}"
         )
+        agent_messages.append(emit_step("design", "Generating visuals", 1, 3, "completed", f"Via {result.provider_used}").to_dict())
+        agent_messages.append(emit_step("design", "Design complete", 2, 3, "completed").to_dict())
 
     except LLMError as e:
         tool_results["design"] = {"ok": False, "error": str(e)}
         msg = f"[Design] Image generation failed: {e}"
+        agent_messages.append(emit_step("design", "Generating visuals", 1, 3, "completed", f"Failed: {e}").to_dict())
+        agent_messages.append(emit_step("design", "Design complete", 2, 3, "completed", "Failed").to_dict())
 
     return {
         "tool_results": tool_results,

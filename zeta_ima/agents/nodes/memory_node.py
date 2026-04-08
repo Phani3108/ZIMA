@@ -140,6 +140,25 @@ async def memory_node(state: AgentState) -> dict:
     except Exception as e:
         log.debug("Conversation archive skipped: %s", e)
 
+    # Record to job history (Future: per-template tracking)
+    try:
+        task_template_id = state.get("task_template_id")
+        if task_template_id:
+            from zeta_ima.memory.job_history import job_history
+            await job_history.record_job(
+                agent_name=state.get("intent", "copy"),
+                task_template_id=task_template_id,
+                user_id=state.get("user_id", ""),
+                team_id=state.get("team_id", ""),
+                brief=state["current_brief"],
+                output_text=state["current_draft"]["text"],
+                review_scores=state.get("review_result", {}).get("scores"),
+                status="approved",
+                workflow_id=output_id,
+            )
+    except Exception as e:
+        log.debug("Job history recording skipped: %s", e)
+
     return {
         "stage": "done",
         "messages": [

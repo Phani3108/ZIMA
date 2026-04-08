@@ -1,0 +1,190 @@
+# ──────────────────────────────────────────────────────────
+# Task Templates — declarative definitions for each content type.
+# Each template defines a unique agent pipeline (chain) and
+# the human-readable steps the user sees in the execution UI.
+# ──────────────────────────────────────────────────────────
+
+templates:
+
+  linkedin_post:
+    name: "LinkedIn Post"
+    description: "Professional LinkedIn content — thought leadership, product updates, announcements"
+    icon: "linkedin"
+    owner_agent: "copy"
+    skill_id: "social_media"
+    prompt_id: "linkedin_post"
+    pipeline: ["copy", "review", "approval"]
+    steps:
+      - name: "Analyze brand voice"
+        agent: "copy"
+        description: "Pull brand examples from memory and load learning guidance"
+      - name: "Generate draft"
+        agent: "copy"
+        description: "Write the LinkedIn post using GPT-4o with brand context"
+      - name: "Quality review"
+        agent: "review"
+        description: "Score brand_fit, clarity, cta_strength against rubric"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+    default_priority: 2
+
+  blog_post:
+    name: "Blog Post"
+    description: "Long-form blog content with research, SEO optimization, and review"
+    icon: "file-text"
+    owner_agent: "copy"
+    skill_id: "content_creation"
+    prompt_id: "blog_post"
+    pipeline: ["research", "copy", "review", "approval", "seo"]
+    steps:
+      - name: "Research topic"
+        agent: "research"
+        description: "Search knowledge base and agency brain for relevant context"
+      - name: "Generate draft"
+        agent: "copy"
+        description: "Write the blog post with research context and brand voice"
+      - name: "Quality review"
+        agent: "review"
+        description: "Actor-critic reflection pass + rubric scoring"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+      - name: "SEO optimization"
+        agent: "seo"
+        description: "Keywords, meta tags, heading structure, and link suggestions"
+    default_priority: 2
+
+  campaign_copy:
+    name: "Campaign Copy"
+    description: "Full campaign brief — research, PM decomposition, copy, design, and SEO"
+    icon: "megaphone"
+    owner_agent: "copy"
+    skill_id: "brand_voice"
+    prompt_id: "campaign_brief"
+    pipeline: ["research", "pm", "copy", "design", "review", "approval", "seo"]
+    steps:
+      - name: "Market research"
+        agent: "research"
+        description: "Gather KB context and brain insights for campaign planning"
+      - name: "Brief decomposition"
+        agent: "pm"
+        description: "PM breaks brief into sub-tasks for each downstream agent"
+      - name: "Generate copy"
+        agent: "copy"
+        description: "Write campaign copy using PM instructions + brand context"
+      - name: "Create visuals"
+        agent: "design"
+        description: "Generate campaign imagery using Gemini/DALL-E or Canva"
+      - name: "Quality review"
+        agent: "review"
+        description: "Multi-lens actor-critic review of all deliverables"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+      - name: "SEO optimization"
+        agent: "seo"
+        description: "Optimize copy for search with keywords and meta tags"
+    default_priority: 3
+
+  seo_article:
+    name: "SEO Article"
+    description: "Search-optimized article — keyword first, then write, review, approve"
+    icon: "search"
+    owner_agent: "seo"
+    skill_id: "seo_content"
+    prompt_id: "seo_article"
+    pipeline: ["research", "seo", "copy", "review", "approval"]
+    steps:
+      - name: "Keyword research"
+        agent: "research"
+        description: "Gather search data and topic context from knowledge base"
+      - name: "SEO brief & structure"
+        agent: "seo"
+        description: "Create keyword strategy, heading structure, and content outline"
+      - name: "Write article"
+        agent: "copy"
+        description: "Write the article following the SEO brief"
+      - name: "Quality review"
+        agent: "review"
+        description: "Score readability, brand fit, and SEO compliance"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+    default_priority: 2
+
+  email_sequence:
+    name: "Email Sequence"
+    description: "Multi-email nurture or campaign sequence"
+    icon: "mail"
+    owner_agent: "copy"
+    skill_id: "email_sequence"
+    prompt_id: "email_sequence"
+    pipeline: ["copy", "review", "approval"]
+    steps:
+      - name: "Draft email sequence"
+        agent: "copy"
+        description: "Write the full email sequence with subject lines and CTAs"
+      - name: "Quality review"
+        agent: "review"
+        description: "Review tone, deliverability hints, and CTA strength"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+    default_priority: 2
+
+  ad_copy:
+    name: "Ad Copy"
+    description: "Paid advertising copy — search ads, social ads, display ads"
+    icon: "zap"
+    owner_agent: "copy"
+    skill_id: "ad_creative"
+    prompt_id: "ad_copy"
+    pipeline: ["research", "copy", "design", "review", "approval"]
+    steps:
+      - name: "Audience research"
+        agent: "research"
+        description: "Research target audience and competitive ad landscape"
+      - name: "Write ad copy"
+        agent: "copy"
+        description: "Generate ad headlines, descriptions, and CTAs"
+      - name: "Create ad visuals"
+        agent: "design"
+        description: "Generate ad creative images in correct aspect ratios"
+      - name: "Quality review"
+        agent: "review"
+        description: "Score clarity, CTA strength, and platform compliance"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+    default_priority: 2
+
+  competitive_analysis:
+    name: "Competitive Analysis"
+    description: "Competitor landscape report with positioning recommendations"
+    icon: "target"
+    owner_agent: "competitive_intel"
+    skill_id: "competitive_intel"
+    prompt_id: "competitor_landscape"
+    pipeline: ["research", "competitive_intel", "review", "approval"]
+    steps:
+      - name: "Gather market data"
+        agent: "research"
+        description: "Search KB and external sources for competitor data"
+      - name: "Analyze competitors"
+        agent: "competitive_intel"
+        description: "Produce competitive brief with gaps, positioning, and angles"
+      - name: "Quality review"
+        agent: "review"
+        description: "Validate analysis quality and completeness"
+      - name: "Manager approval"
+        agent: "approval"
+        description: "Route to named approver for final sign-off"
+        is_human_gate: true
+    default_priority: 2

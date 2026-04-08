@@ -23,7 +23,7 @@ from zeta_ima.agents.state import AgentState
 from zeta_ima.agents.roles import role_registry
 from zeta_ima.agents.reflection import make_reflection_loop
 from zeta_ima.config import settings, get_openai_client
-from zeta_ima.orchestrator.a2a import AgentMessage, emit, get_latest_handoff
+from zeta_ima.orchestrator.a2a import AgentMessage, emit, emit_step, get_latest_handoff
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ async def review_node(state: AgentState) -> dict:
         extra_criteria = f"\n\nPM Review Criteria: {handoff.handoff_instructions}"
 
     # ── Phase 1: Actor-Critic Reflection ────────────────────────────────────
+    agent_messages.append(emit_step("review", "Running reflection loop", 0, 4, "started").to_dict())
     reflection_result = None
     polished_draft = draft_text
     try:
@@ -76,9 +77,10 @@ async def review_node(state: AgentState) -> dict:
         polished_draft = reflection_result.final_draft
     except Exception:
         pass  # Fallback to original draft if reflection fails
+    agent_messages.append(emit_step("review", "Running reflection loop", 0, 4, "completed",
+        f"{reflection_result.iterations_used} iterations, score {reflection_result.final_score:.1f}" if reflection_result else "Skipped").to_dict())
 
-    # ── Phase 2: Final rubric scoring ────────────────────────────────────────
-    client = get_openai_client()
+    # ── Phase 2: Final rubric scoring ────────────────────────────────────────    agent_messages.append(emit_step("review", "Scoring against rubric", 1, 4, "started").to_dict())    client = get_openai_client()
     base_prompt = _PROMPT_PATH.read_text()
     role = role_registry.get_by_node("review")
     system_prompt = f"{role.system_prompt_prefix()}\n\n{base_prompt}" if role else base_prompt
@@ -105,6 +107,8 @@ async def review_node(state: AgentState) -> dict:
     )
     raw = resp.choices[0].message.content
     review = _parse_review(raw)
+    agent_messages.append(emit_step("review", "Scoring against rubric", 1, 4, "completed",
+        f"{'PASS' if review['passed'] else 'FAIL'} — brand_fit:{review['scores'].get('brand_fit')}").to_dict())
 
     # Force to human review after MAX_AUTO_REVISIONS even if FAIL
     force_human = iteration > MAX_AUTO_REVISIONS
@@ -155,8 +159,7 @@ async def review_node(state: AgentState) -> dict:
         ),
     ).to_dict())
 
-    # ── Phase 5: Confidence-gated auto-approval ──────────────────────────────
-    auto_approved = False
+    # ── Phase 5: Confidence-gated auto-approval ──────────────────────────────    agent_messages.append(emit_step("review", "Checking auto-approval", 2, 4, "started").to_dict())    auto_approved = False
     if review["passed"] and settings.auto_approve_enabled:
         scores = review.get("scores", {})
         all_above_min = all(
@@ -173,6 +176,11 @@ async def review_node(state: AgentState) -> dict:
                 payload={"auto_approved": True, "scores": scores},
                 context_summary="Auto-approved: all scores exceeded thresholds.",
             ).to_dict())
+
+    agent_messages.append(emit_step("review", "Checking auto-approval", 2, 4, "completed",
+        "Auto-approved" if auto_approved else "Requires human approval").to_dict())
+    agent_messages.append(emit_step("review", "Review complete", 3, 4, "completed",
+        f"{'PASS' if review['passed'] else 'FAIL'} — {review.get('reason', '')[:100]}").to_dict())
 
     result = {
         "review_result": review,

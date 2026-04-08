@@ -24,6 +24,10 @@ MESSAGE_TYPES = (
     "delegation",       # Agent delegates a sub-task to another
     "question",         # Agent asks a clarifying question
     "status_update",    # Progress report during execution
+    # ── Future: step-level visibility ──
+    "step_started",     # Agent begins a named step (for live execution UI)
+    "step_completed",   # Agent finishes a named step
+    "plan_announced",   # Pipeline plan broadcast at execution start
 )
 
 
@@ -157,6 +161,40 @@ def build_context_from_messages(agent_messages: list[dict]) -> str:
             parts.append(f"[{prefix} → {msg_type}]: {content}")
 
     return "\n".join(parts)
+
+
+def emit_step(
+    from_node: str,
+    step_name: str,
+    step_index: int,
+    total_steps: int,
+    status: str = "started",
+    preview: str = "",
+) -> AgentMessage:
+    """Create a step-level visibility event for the execution UI.
+
+    Args:
+        from_node: The agent node emitting the step.
+        step_name: Human-readable step name (e.g. "Loading brand context").
+        step_index: 0-based index of this step within the agent's work.
+        total_steps: Total steps this agent will perform.
+        status: "started" or "completed".
+        preview: Optional short preview of step output.
+    """
+    msg_type = "step_started" if status == "started" else "step_completed"
+    return emit(
+        from_node,
+        "all",
+        msg_type,
+        payload={
+            "step_name": step_name,
+            "step_index": step_index,
+            "total_steps": total_steps,
+            "status": status,
+            "preview": preview[:200] if preview else "",
+        },
+        context_summary=f"{step_name} ({status})",
+    )
 
 
 def build_execution_timeline(agent_messages: list[dict]) -> List[dict]:

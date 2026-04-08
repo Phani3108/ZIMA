@@ -55,3 +55,6 @@ class AgentState(TypedDict):
 
     # ── Team Learning (Phase L) ──
     team_id: str                # Team the user belongs to (resolved from membership)
+
+    # ── Future: Task Template tracking ──
+    task_template_id: Optional[str]  # Which task template is driving this pipeline (e.g. "linkedin_post")

@@ -447,3 +447,41 @@ export const history = {
   detail: (sessionId: string, teamId = "") =>
     fetchJSON(`/history/${sessionId}${teamId ? `?team_id=${encodeURIComponent(teamId)}` : ""}`),
 };
+
+// ─── Future: Templates ──────────────────────────────────────────────
+
+export const futureTemplates = {
+  list: () => fetchJSON("/future/templates"),
+  get: (id: string) => fetchJSON(`/future/templates/${id}`),
+  start: (id: string, body: { brief: string; variables?: Record<string, string>; name?: string; team_id?: string }) =>
+    fetchJSON(`/future/templates/${id}/start`, { method: "POST", body: JSON.stringify(body) }),
+};
+
+// ─── Future: Agents ─────────────────────────────────────────────────
+
+export const futureAgents = {
+  list: () => fetchJSON("/future/agents"),
+  get: (name: string) => fetchJSON(`/future/agents/${name}`),
+  jobs: (name: string, scope: "user" | "org" = "user", limit = 10) =>
+    fetchJSON(`/future/agents/${name}/jobs?scope=${scope}&limit=${limit}`),
+  suggestions: (name: string, templateId?: string) => {
+    const params = templateId ? `?template_id=${encodeURIComponent(templateId)}` : "";
+    return fetchJSON(`/future/agents/${name}/suggestions${params}`);
+  },
+};
+
+// ─── Future: Approvals ──────────────────────────────────────────────
+
+export const futureApprovals = {
+  mine: () => fetchJSON("/future/approvals/mine"),
+  listRouting: (teamId: string) => fetchJSON(`/future/teams/${teamId}/approval-routing`),
+  setRouting: (teamId: string, body: {
+    agent_type: string;
+    approver_user_id: string;
+    approver_display_name?: string;
+    approver_email?: string;
+    fallback_approver_user_id?: string;
+  }) => fetchJSON(`/future/teams/${teamId}/approval-routing`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteRouting: (teamId: string, agentType: string) =>
+    fetchJSON(`/future/teams/${teamId}/approval-routing/${encodeURIComponent(agentType)}`, { method: "DELETE" }),
+};

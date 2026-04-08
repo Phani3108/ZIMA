@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     auto_approve_brand_fit: int = 9       # brand_fit specifically must be >= this
     auto_approve_enabled: bool = False    # Off by default; enable per campaign
 
+    # ── SMTP (email notifications) ─────────────────────────────────────────
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "noreply@zeta-ima.io"
+    smtp_use_tls: bool = True
+
     # Local dev vault key — used when az_key_vault_url is empty.
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     vault_key: str = ""

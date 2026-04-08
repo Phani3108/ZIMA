@@ -15,7 +15,7 @@ from pathlib import Path
 from zeta_ima.agents.state import AgentState
 from zeta_ima.agents.roles import role_registry
 from zeta_ima.config import settings, get_openai_client
-from zeta_ima.orchestrator.a2a import AgentMessage, emit
+from zeta_ima.orchestrator.a2a import AgentMessage, emit, emit_step
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,10 @@ async def pm_node(state: AgentState) -> dict:
     """Decompose the brief and create A2A handoff messages for downstream agents."""
     client = get_openai_client()
     brief = state.get("current_brief", "")
+    agent_messages = list(state.get("agent_messages", []))
+
+    # Step 1/3: Decomposing brief
+    agent_messages.append(emit_step("pm", "Decomposing brief", 0, 3, "started").to_dict())
 
     # Build context from research + brain
     kb_context = "\n".join(state.get("kb_context", [])[:3])
@@ -82,6 +86,10 @@ Return a JSON object with copy_instructions, design_instructions, review_criteri
     )
 
     raw = resp.choices[0].message.content or ""
+    agent_messages.append(emit_step("pm", "Decomposing brief", 0, 3, "completed", f"Analysis: {len(raw)} chars").to_dict())
+
+    # Step 2/3: Creating agent instructions
+    agent_messages.append(emit_step("pm", "Creating agent instructions", 1, 3, "started").to_dict())
 
     # Parse PM output
     try:
@@ -96,7 +104,6 @@ Return a JSON object with copy_instructions, design_instructions, review_criteri
         decomposition = {"context_summary": raw, "constraints": []}
 
     # Create A2A handoff messages for downstream agents
-    agent_messages = list(state.get("agent_messages", []))
     pipeline = state.get("pipeline", [])
 
     # Handoff to copy agent
@@ -136,6 +143,8 @@ Return a JSON object with copy_instructions, design_instructions, review_criteri
         ).to_dict())
 
     # Status update broadcast
+    agent_messages.append(emit_step("pm", "Creating agent instructions", 1, 3, "completed", f"Briefed {len([a for a in ('copy', 'design', 'review', 'seo') if a in pipeline])} agents").to_dict())
+    agent_messages.append(emit_step("pm", "PM briefing complete", 2, 3, "completed").to_dict())
     agent_messages.append(emit(
         "pm", "all", "status_update",
         payload={
