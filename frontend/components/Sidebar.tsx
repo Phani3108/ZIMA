@@ -30,9 +30,10 @@ const GROUPS: NavGroup[] = [
     key: "future",
     label: "Future",
     items: [
-      { href: "/future/chat",      label: "Future Chat",   icon: Rocket },
-      { href: "/future/agents",    label: "Agents",        icon: UserCircle },
-      { href: "/future/approvals", label: "Approvals",     icon: Shield },
+      { href: "/future/agent/design", label: "Agent Workspace", icon: Rocket },
+      { href: "/future/chat",         label: "Future Chat",     icon: Rocket },
+      { href: "/future/agents",       label: "Agent Directory",  icon: UserCircle },
+      { href: "/future/approvals",    label: "Approvals",       icon: Shield },
     ],
   },
   {

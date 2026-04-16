@@ -1,17 +1,21 @@
 """
-Future Agents routes — browse agent profiles, job history, and suggestions.
+Future Agents routes — browse agent profiles, job history, suggestions, and activities.
 
-GET  /future/agents                       → list all agents with role info
-GET  /future/agents/{name}                → agent profile (role + stats)
-GET  /future/agents/{name}/jobs           → recent jobs for this agent
-GET  /future/agents/{name}/suggestions    → suggested prior outputs to reuse
+GET  /future/agents                          → list all agents with role info
+GET  /future/agents/{name}                   → agent profile (role + stats)
+GET  /future/agents/{name}/jobs              → recent jobs for this agent
+GET  /future/agents/{name}/suggestions       → suggested prior outputs to reuse
+GET  /future/agents/{name}/activities        → scoped activities for this agent
+GET  /future/agents/{name}/activities/{id}   → single activity detail
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
+from dataclasses import asdict
 
 from zeta_ima.api.auth import get_current_user
 from zeta_ima.agents.roles import RoleRegistry
+from zeta_ima.agents.activities import ActivityRegistry
 from zeta_ima.memory.job_history import job_history
 
 router = APIRouter(prefix="/future/agents", tags=["future-agents"])
@@ -86,3 +90,31 @@ async def get_agent_suggestions(
         limit=2,
     )
     return suggestions
+
+
+# ─── Activities ─────────────────────────────────────────────────────
+
+_activity_registry = ActivityRegistry.get_instance()
+
+
+@router.get("/{agent_name}/activities")
+async def list_agent_activities(
+    agent_name: str,
+    user: dict = Depends(get_current_user),
+) -> list[dict]:
+    """Return all scoped activities this agent can perform."""
+    activities = _activity_registry.list_for_agent(agent_name)
+    return [asdict(a) for a in activities]
+
+
+@router.get("/{agent_name}/activities/{activity_id}")
+async def get_agent_activity(
+    agent_name: str,
+    activity_id: str,
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Return a single activity definition with full input schema."""
+    activity = _activity_registry.get(activity_id)
+    if activity is None or activity.agent != agent_name:
+        raise HTTPException(404, f"Activity '{activity_id}' not found for agent '{agent_name}'")
+    return asdict(activity)

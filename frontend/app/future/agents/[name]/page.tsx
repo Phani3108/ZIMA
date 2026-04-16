@@ -202,6 +202,7 @@ export default function AgentProfilePage() {
         <DemoBanner
           feature="Agent Profile"
           compact
+          steps={["Start the backend", "Browse agent directory", "View agent details"]}
         />
       )}
 

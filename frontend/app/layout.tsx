@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 import { ToastProvider } from "@/components/ToastProvider";
+import RootShell from "@/components/RootShell";
 
 export const metadata: Metadata = {
   title: "Zeta IMA — AI Marketing Agency",
@@ -13,8 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="flex h-screen overflow-hidden bg-gray-100">
         <ToastProvider>
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          <RootShell>{children}</RootShell>
         </ToastProvider>
       </body>
     </html>

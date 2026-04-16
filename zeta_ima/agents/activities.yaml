@@ -1,0 +1,308 @@
+# Agent Activity Definitions
+# Each agent has narrowly-scoped activities (tasks it can perform).
+# Activities define: input requirements, workflow steps, tool preferences, and output type.
+
+agents:
+
+  design:
+    label: Design Agent
+    title: Visual Designer
+    avatar: "🖌️"
+    department: design
+    tools: [gemini_image, dalle, canva, figma]
+    activities:
+      - id: social_visual
+        title: Social Media Visual
+        description: Create platform-optimized visuals for LinkedIn, Instagram, Twitter, Facebook
+        input_schema:
+          - { id: platform, label: "Which platform?", type: select, options: [LinkedIn, Instagram, Twitter, Facebook], required: true }
+          - { id: style, label: "Visual style?", type: select, options: [Modern Minimalist, Bold & Colorful, Corporate Clean, Playful, Dark & Premium] }
+          - { id: details, label: "Specific elements?", type: text, hint: "Brand colors, taglines, imagery…" }
+        workflow: [Brief, Compose Prompt, Generate Image, Iterate, Review, Deliver]
+        tools: [gemini_image, dalle]
+        output_type: image
+
+      - id: email_header
+        title: Email Header
+        description: Design responsive email headers aligned with campaign themes
+        input_schema:
+          - { id: campaign, label: "Campaign name or theme?", type: text, required: true }
+          - { id: width, label: "Header width?", type: select, options: ["600px", "700px", "100%"] }
+        workflow: [Brief, Analyze Layout, Generate, Format, Review]
+        tools: [gemini_image, canva]
+        output_type: image
+
+      - id: brand_asset
+        title: Brand Asset Pack
+        description: Generate cohesive brand asset variants — logos, banners, icons
+        input_schema:
+          - { id: asset_types, label: "Which assets?", type: multiselect, options: [Logo, Banner, Icon Set, Social Kit, Favicon], required: true }
+          - { id: brand_notes, label: "Brand guidelines or notes?", type: text }
+        workflow: [Brief, Style Analysis, Generate Variants, Select, Finalize]
+        tools: [gemini_image, dalle]
+        output_type: image_set
+
+      - id: ad_creative
+        title: Ad Creative
+        description: Produce ad creatives with A/B variants for display and social
+        input_schema:
+          - { id: platform, label: "Ad platform?", type: select, options: [Facebook Ads, Google Display, LinkedIn Ads, Instagram Ads], required: true }
+          - { id: variant_count, label: "How many variants?", type: select, options: ["2", "3", "4"] }
+        workflow: [Brief, Audience Research, Concept, Generate, A/B Variants, Review]
+        tools: [gemini_image, dalle]
+        output_type: image_set
+
+      - id: presentation_slide
+        title: Presentation Slide
+        description: Create individual presentation slides with modern layouts
+        input_schema:
+          - { id: topic, label: "Slide topic or title?", type: text, required: true }
+          - { id: layout, label: "Layout style?", type: select, options: [Title Slide, Content + Image, Data Visualization, Quote, Comparison] }
+        workflow: [Brief, Layout Selection, Generate, Refine, Export]
+        tools: [gemini_image]
+        output_type: image
+
+  copy:
+    label: Copywriter Agent
+    title: Senior Copywriter
+    avatar: "✍️"
+    department: content
+    tools: [openai, brand_memory, learning_memory]
+    activities:
+      - id: linkedin_post
+        title: LinkedIn Post
+        description: Professional LinkedIn posts with engagement-optimized structure
+        input_schema:
+          - { id: topic, label: "Post topic?", type: text, required: true }
+          - { id: tone, label: "Tone?", type: select, options: [Professional, Conversational, Thought Leader, Personal Story] }
+          - { id: cta, label: "Call to action?", type: text, hint: "What should readers do?" }
+        workflow: [Brief, Research Brand, Draft, Review, Polish]
+        tools: [openai, brand_memory]
+        output_type: text
+
+      - id: email_sequence
+        title: Email Sequence
+        description: Multi-touch email nurture sequences with personalization
+        input_schema:
+          - { id: goal, label: "Sequence goal?", type: select, options: [Welcome/Onboarding, Nurture, Re-engagement, Product Launch, Event Follow-up], required: true }
+          - { id: email_count, label: "Number of emails?", type: select, options: ["3", "5", "7"] }
+          - { id: audience, label: "Target audience?", type: text }
+        workflow: [Brief, Strategy, Draft Emails, Review Each, Finalize]
+        tools: [openai]
+        output_type: text_series
+
+      - id: blog_article
+        title: Blog Article
+        description: Long-form SEO-optimized blog content with structured headers
+        input_schema:
+          - { id: topic, label: "Article topic?", type: text, required: true }
+          - { id: word_count, label: "Target length?", type: select, options: ["600 words", "1200 words", "2000 words"] }
+          - { id: keywords, label: "Target keywords?", type: text, hint: "Comma-separated" }
+        workflow: [Brief, Outline, Draft, SEO Pass, Review]
+        tools: [openai, brand_memory]
+        output_type: text
+
+      - id: ad_copy
+        title: Ad Copy Variants
+        description: Short-form ad copy with A/B messaging variants
+        input_schema:
+          - { id: platform, label: "Ad platform?", type: select, options: [Google Ads, Facebook, LinkedIn, Twitter], required: true }
+          - { id: product, label: "Product or feature?", type: text, required: true }
+          - { id: variant_count, label: "How many variants?", type: select, options: ["2", "3", "5"] }
+        workflow: [Brief, Audience Analysis, Draft Variants, Score, Select]
+        tools: [openai]
+        output_type: text_set
+
+  seo:
+    label: SEO Agent
+    title: SEO Content Specialist
+    avatar: "🔎"
+    department: content
+    tools: [semrush, google_search_console, openai]
+    activities:
+      - id: keyword_strategy
+        title: Keyword Strategy
+        description: Research and prioritize target keywords for content planning
+        input_schema:
+          - { id: topic, label: "Topic or niche?", type: text, required: true }
+          - { id: market, label: "Target market?", type: select, options: [US, UK, EU, Global, APAC] }
+          - { id: intent, label: "Search intent?", type: multiselect, options: [Informational, Transactional, Navigational, Commercial] }
+        workflow: [Brief, Keyword Research, Competition Analysis, Prioritize, Deliver Report]
+        tools: [semrush, openai]
+        output_type: report
+
+      - id: content_optimization
+        title: Content Optimization
+        description: Optimize existing content for search with meta tags and structure
+        input_schema:
+          - { id: content, label: "Paste content or URL", type: text, required: true }
+          - { id: target_keyword, label: "Primary target keyword?", type: text }
+        workflow: [Input Content, Analyze, Optimize Elements, Score, Deliver]
+        tools: [openai]
+        output_type: text
+
+      - id: seo_audit
+        title: SEO Content Audit
+        description: Audit content pages for SEO best practices and quick wins
+        input_schema:
+          - { id: url, label: "Page URL to audit", type: text, required: true }
+        workflow: [Page URL, Crawl, Score Factors, Recommendations, Report]
+        tools: [semrush, openai]
+        output_type: report
+
+  pm:
+    label: Project Manager
+    title: Project Manager
+    avatar: "📋"
+    department: operations
+    tools: [jira, confluence, github, openai]
+    activities:
+      - id: brief_decompose
+        title: Brief Decomposition
+        description: Break complex briefs into scoped tasks for each agent
+        input_schema:
+          - { id: brief, label: "Campaign or project brief?", type: text, required: true }
+          - { id: agents, label: "Which agents to involve?", type: multiselect, options: [Copywriter, Designer, SEO, Competitive Analyst, Product Marketer] }
+        workflow: [Brief, Analyze Requirements, Decompose, Assign Agents, Deliver Plan]
+        tools: [openai]
+        output_type: plan
+
+      - id: create_ticket
+        title: Jira Ticket
+        description: Create structured Jira tickets from task descriptions
+        input_schema:
+          - { id: summary, label: "Ticket summary?", type: text, required: true }
+          - { id: description, label: "Details?", type: text }
+          - { id: project, label: "Jira project key?", type: text, required: true }
+        workflow: [Brief, Format, Create Ticket, Confirm]
+        tools: [jira]
+        output_type: ticket
+
+      - id: publish_page
+        title: Confluence Page
+        description: Publish content to Confluence with proper formatting
+        input_schema:
+          - { id: title, label: "Page title?", type: text, required: true }
+          - { id: content, label: "Content to publish?", type: text, required: true }
+        workflow: [Content, Format HTML, Publish, Share Link]
+        tools: [confluence]
+        output_type: page
+
+  competitive_intel:
+    label: Competitive Analyst
+    title: Competitive Analyst
+    avatar: "🕵️"
+    department: strategy
+    tools: [semrush, openai]
+    activities:
+      - id: competitor_analysis
+        title: Competitor Analysis
+        description: Deep-dive analysis of 3-5 competitors with positioning angles
+        input_schema:
+          - { id: competitors, label: "Competitor names or URLs?", type: text, required: true, hint: "Comma-separated" }
+          - { id: focus, label: "Focus area?", type: multiselect, options: [Messaging, Pricing, Features, Content Strategy, Social Presence] }
+        workflow: [Brief, Identify Competitors, Analyze Positioning, Find Gaps, Report]
+        tools: [semrush, openai]
+        output_type: report
+
+      - id: market_gaps
+        title: Market Gap Finder
+        description: Identify underserved opportunities in your market
+        input_schema:
+          - { id: market, label: "Market or category?", type: text, required: true }
+          - { id: our_position, label: "Our current positioning?", type: text }
+        workflow: [Market Brief, Research, Gap Analysis, Opportunities, Recommendations]
+        tools: [openai]
+        output_type: report
+
+  product_marketing:
+    label: Product Marketer
+    title: Product Marketer
+    avatar: "🚀"
+    department: strategy
+    tools: [openai]
+    activities:
+      - id: positioning
+        title: Positioning Statement
+        description: Craft a clear positioning statement for your product or feature
+        input_schema:
+          - { id: product, label: "Product or feature name?", type: text, required: true }
+          - { id: audience, label: "Target audience?", type: text, required: true }
+          - { id: differentiator, label: "Key differentiator?", type: text }
+        workflow: [Brief, Market Context, Draft Statement, Refine, Finalize]
+        tools: [openai]
+        output_type: text
+
+      - id: messaging_matrix
+        title: Messaging Matrix
+        description: Audience × value prop × proof point matrix for campaigns
+        input_schema:
+          - { id: product, label: "Product name?", type: text, required: true }
+          - { id: audiences, label: "Target audiences?", type: text, required: true, hint: "Comma-separated persona names" }
+        workflow: [Brief, Identify Audiences, Map Value Props, Add Proof Points, Deliver]
+        tools: [openai]
+        output_type: matrix
+
+      - id: launch_narrative
+        title: Launch Narrative
+        description: Compelling product launch story with channel recommendations
+        input_schema:
+          - { id: product, label: "What are you launching?", type: text, required: true }
+          - { id: date, label: "Launch date?", type: text }
+          - { id: channels, label: "Priority channels?", type: multiselect, options: [Blog, Email, Social, Press, Webinar, Product Hunt] }
+        workflow: [Brief, Research, Craft Narrative, Channel Strategy, Review]
+        tools: [openai]
+        output_type: text
+
+  review:
+    label: Quality Reviewer
+    title: Copy Editor
+    avatar: "📑"
+    department: content
+    tools: [openai_mini, brand_memory]
+    activities:
+      - id: content_review
+        title: Content Review
+        description: Score content on brand fit, clarity, and CTA strength with feedback
+        input_schema:
+          - { id: content, label: "Content to review", type: text, required: true }
+          - { id: review_type, label: "Review focus?", type: multiselect, options: [Brand Fit, Clarity, CTA Strength, Tone, Grammar, SEO] }
+        workflow: [Input Content, Actor-Critic Loop, Score, Feedback, Verdict]
+        tools: [openai_mini]
+        output_type: review
+
+      - id: brand_check
+        title: Brand Voice Check
+        description: Verify content alignment with brand guidelines and voice
+        input_schema:
+          - { id: content, label: "Content to check", type: text, required: true }
+        workflow: [Input Content, Compare Brand, Score Alignment, Suggestions]
+        tools: [openai_mini, brand_memory]
+        output_type: review
+
+  research:
+    label: Research Analyst
+    title: Market Researcher
+    avatar: "📊"
+    department: strategy
+    tools: [qdrant_kb, agency_brain]
+    activities:
+      - id: market_research
+        title: Market Research
+        description: Deep research using knowledge base and agency brain
+        input_schema:
+          - { id: query, label: "Research question?", type: text, required: true }
+          - { id: sources, label: "Preferred sources?", type: multiselect, options: [Knowledge Base, Agency Brain, Both] }
+        workflow: [Query, Search KB, Search Brain, Synthesize, Report]
+        tools: [qdrant_kb, agency_brain]
+        output_type: report
+
+      - id: context_brief
+        title: Context Brief
+        description: Generate context briefs to feed other agents before tasks
+        input_schema:
+          - { id: topic, label: "Topic for context gathering?", type: text, required: true }
+          - { id: target_agent, label: "Which agent needs this context?", type: select, options: [Copywriter, Designer, SEO, PM] }
+        workflow: [Topic, Gather Sources, Summarize, Deliver Context]
+        tools: [qdrant_kb, agency_brain]
+        output_type: context

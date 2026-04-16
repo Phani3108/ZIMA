@@ -468,6 +468,8 @@ export const futureAgents = {
     const params = templateId ? `?template_id=${encodeURIComponent(templateId)}` : "";
     return fetchJSON(`/future/agents/${name}/suggestions${params}`);
   },
+  activities: (name: string) => fetchJSON(`/future/agents/${name}/activities`),
+  activity: (name: string, actId: string) => fetchJSON(`/future/agents/${name}/activities/${actId}`),
 };
 
 // ─── Future: Approvals ──────────────────────────────────────────────
