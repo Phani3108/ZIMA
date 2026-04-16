@@ -6,6 +6,7 @@ import { ArrowLeft, Settings2, ExternalLink } from "lucide-react";
 import clsx from "clsx";
 
 import { useBackend } from "@/lib/useBackend";
+import { futureAgents, designConfig } from "@/lib/api";
 import DemoBanner from "@/components/DemoBanner";
 import ToolCard from "@/components/future/ToolCard";
 import CapabilityCard, { type Capability } from "@/components/future/CapabilityCard";
@@ -233,47 +234,283 @@ function s(...labels: string[]): WorkflowStep[] {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   EXECUTION VIEW  — shown when a task is running
+   EXECUTION VIEW  — per-skill, per-platform, real backend execution
    ═══════════════════════════════════════════════════════════════════ */
 
-type ExecPhase = "questions" | "planning" | "running" | "iteration" | "done";
+type ExecPhase = "loading" | "questions" | "planning" | "running" | "iteration" | "done" | "error";
+
+/** Shape returned by GET /future/agents/{name}/activities/{id} */
+type ActivityDef = {
+  id: string;
+  agent: string;
+  title: string;
+  description: string;
+  input_schema: { id: string; label: string; type: string; options?: string[]; hint?: string; required?: boolean }[];
+  workflow: string[];
+  tools: string[];
+  output_type: string;
+};
+
+/** Shape returned by GET /design/config/tools */
+type ToolConfigEntry = { skill_id: string; primary_tool: string; backup_tool: string; enabled: boolean };
+/** Shape returned by GET /design/config/rules */
+type DesignRules = {
+  max_iterations: number; default_quality: string; auto_review: boolean;
+  auto_approve_min_score: number; style_prompt_prefix: string;
+};
+/** Shape returned by GET /design/config/presets */
+type PresetEntry = {
+  skill_id: string; platform: string; label: string;
+  width: number; height: number; aspect_ratio: string;
+  resolution: string; format: string;
+};
+
+/** Shape returned by POST .../execute */
+type ExecuteResult = {
+  ok: boolean; image_url: string; download_url: string;
+  provider: string; model: string; revised_prompt: string;
+  aspect_ratio: string; resolution: string; mime_type: string;
+  skill_id: string; platform: string;
+};
 
 function ExecutionView({
-  agent, onBack,
-}: { agent: AgentProfile; onBack: () => void }) {
-  const [phase, setPhase] = useState<ExecPhase>("questions");
+  agent, capabilityId, onBack,
+}: { agent: AgentProfile; capabilityId: string; onBack: () => void }) {
+  const { online } = useBackend();
+  const [phase, setPhase] = useState<ExecPhase>("loading");
   const [narration, setNarration] = useState<NarrationEntry[]>([]);
   const idRef = useRef(0);
 
-  // Demo questions
-  const demoQuestions: AgentQuestion[] = [
-    { id: "platform", label: "Which platform is this for?", type: "select", options: ["LinkedIn", "Instagram", "Twitter", "Facebook", "Email"], required: true },
-    { id: "style", label: "Visual style preference?", type: "select", options: ["Modern Minimalist", "Bold & Colorful", "Corporate Clean", "Playful", "Dark & Premium"] },
-    { id: "details", label: "Any specific elements to include?", type: "text", hint: "Brand colors, taglines, imagery preferences..." },
-  ];
+  // Loaded from backend
+  const [activity, setActivity] = useState<ActivityDef | null>(null);
+  const [toolConfigs, setToolConfigs] = useState<ToolConfigEntry[]>([]);
+  const [rules, setRules] = useState<DesignRules | null>(null);
+  const [presets, setPresets] = useState<PresetEntry[]>([]);
 
-  const demoPlan: PlanStep[] = [
-    { id: "p1", label: "Analyze brief and compose image generation prompt", tool: "GPT-4o", estimated: "~10s", status: "pending" },
-    { id: "p2", label: "Generate initial image with optimal aspect ratio", tool: "Gemini Image", estimated: "~20s", status: "pending" },
-    { id: "p3", label: "Review output against brand guidelines", estimated: "~5s", status: "pending" },
-    { id: "p4", label: "Present iteration for your feedback", status: "pending" },
-  ];
+  // Execution state
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [promptText, setPromptText] = useState("");
+  const [iterationCount, setIterationCount] = useState(0);
+  const [lastResult, setLastResult] = useState<ExecuteResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const addNarration = (type: NarrationEntry["type"], text: string, detail?: string) => {
+  /* ── Load activity definition + engine config on mount ── */
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        // Try backend first; if offline, build from DEMO_AGENTS capabilities
+        if (online) {
+          const [actData, toolsData, rulesData, presetsData] = await Promise.all([
+            futureAgents.activity(agent.name, capabilityId),
+            designConfig.getTools().catch(() => []),
+            designConfig.getRules().catch(() => null),
+            designConfig.getPresets(capabilityId).catch(() => []),
+          ]);
+          if (cancelled) return;
+          setActivity(actData);
+          setToolConfigs(toolsData);
+          setRules(rulesData);
+          setPresets(presetsData);
+        } else {
+          // Offline fallback: build ActivityDef from DEMO_AGENTS
+          const cap = agent.capabilities.find((c) => c.id === capabilityId);
+          if (cap) {
+            // Use the hardcoded capabilities as a minimal ActivityDef
+            setActivity({
+              id: cap.id,
+              agent: agent.name,
+              title: cap.title,
+              description: cap.description,
+              input_schema: buildOfflineSchema(cap.id),
+              workflow: cap.steps.map((s) => s.label),
+              tools: cap.tools,
+              output_type: "image",
+            });
+          }
+        }
+        if (!cancelled) setPhase("questions");
+      } catch (err) {
+        if (!cancelled) {
+          // Fall back to offline schema on API error
+          const cap = agent.capabilities.find((c) => c.id === capabilityId);
+          if (cap) {
+            setActivity({
+              id: cap.id,
+              agent: agent.name,
+              title: cap.title,
+              description: cap.description,
+              input_schema: buildOfflineSchema(cap.id),
+              workflow: cap.steps.map((s) => s.label),
+              tools: cap.tools,
+              output_type: "image",
+            });
+          }
+          setPhase("questions");
+        }
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [agent, capabilityId, online]);
+
+  /* ── Derive per-skill questions from activity.input_schema ── */
+  const questions: AgentQuestion[] = useMemo(() => {
+    if (!activity) return [];
+    return activity.input_schema.map((f) => ({
+      id: f.id,
+      label: f.label,
+      type: f.type === "multiselect" ? "multiselect" as const : f.type === "select" ? "select" as const : "text" as const,
+      options: f.options,
+      hint: f.hint,
+      required: f.required,
+    }));
+  }, [activity]);
+
+  /* ── Derive per-skill plan from workflow + engine config ── */
+  const plan: PlanStep[] = useMemo(() => {
+    if (!activity) return [];
+    const tc = toolConfigs.find((t) => t.skill_id === capabilityId);
+    const primaryTool = tc?.primary_tool ?? activity.tools[0] ?? "";
+    const selectedPreset = presets[0]; // first matching preset
+
+    return activity.workflow.map((stepLabel, i) => {
+      const isGenerate = /generate|create|image/i.test(stepLabel);
+      const isReview = /review|check/i.test(stepLabel);
+      return {
+        id: `p${i}`,
+        label: stepLabel,
+        tool: isGenerate ? primaryTool : isReview ? "Quality Reviewer" : undefined,
+        estimated: isGenerate ? "~15-30s" : isReview ? "~5s" : undefined,
+        status: "pending" as const,
+      };
+    });
+  }, [activity, toolConfigs, presets, capabilityId]);
+
+  /* ── Plan summary based on skill + answers ── */
+  const planSummary = useMemo(() => {
+    if (!activity) return "";
+    const tc = toolConfigs.find((t) => t.skill_id === capabilityId);
+    const tool = tc?.primary_tool ?? activity.tools[0] ?? "AI";
+    const selectedPreset = presets[0];
+    const dims = selectedPreset ? `${selectedPreset.width}×${selectedPreset.height}` : "";
+    const platform = (answers.platform as string) || "";
+
+    return `I'll create a ${activity.title.toLowerCase()}${platform ? ` for ${platform}` : ""} using ${tool}${dims ? ` at ${dims}px` : ""}${rules?.style_prompt_prefix ? ". Your brand style rules will be applied." : ""}. I'll iterate until you're satisfied (max ${rules?.max_iterations ?? 5} iterations).`;
+  }, [activity, toolConfigs, presets, answers, rules, capabilityId]);
+
+  const addNarration = useCallback((type: NarrationEntry["type"], text: string, detail?: string) => {
     idRef.current += 1;
-    setNarration((n) => [...n, { id: String(idRef.current), type, text, detail, timestamp: "now" }]);
-  };
+    setNarration((n) => [...n, { id: String(idRef.current), type, text, detail, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }]);
+  }, []);
 
-  const startExecution = () => {
+  /* ── Execute via real API ── */
+  const executeTask = useCallback(async (overridePrompt?: string) => {
+    if (!activity) return;
     setPhase("running");
-    addNarration("thinking", "Analyzing your brief and composing the image prompt...", "I'll use a 1:1 aspect ratio since this is for LinkedIn feed.");
-    setTimeout(() => addNarration("tool", "Calling Gemini Image API...", "Provider: gemini-3.1-flash-image-preview | resolution: 1K"), 800);
-    setTimeout(() => addNarration("observation", "Image generated successfully. Checking brand alignment..."), 1800);
-    setTimeout(() => {
-      addNarration("milestone", "First iteration ready for your review!");
+
+    const tc = toolConfigs.find((t) => t.skill_id === capabilityId);
+    const toolName = tc?.primary_tool ?? activity.tools[0] ?? "AI";
+    const platform = (answers.platform as string) || (answers.campaign as string) || "";
+    const selectedPreset = presets[0];
+
+    // Build prompt from answers + promptText
+    const promptParts: string[] = [];
+    if (overridePrompt) {
+      promptParts.push(overridePrompt);
+    } else if (promptText) {
+      promptParts.push(promptText);
+    }
+    // Add all text-type answers as context
+    for (const [key, val] of Object.entries(answers)) {
+      if (typeof val === "string" && val.trim() && key !== "platform") {
+        const field = activity.input_schema.find((f) => f.id === key);
+        promptParts.push(`${field?.label ?? key}: ${val}`);
+      } else if (Array.isArray(val) && val.length > 0) {
+        const field = activity.input_schema.find((f) => f.id === key);
+        promptParts.push(`${field?.label ?? key}: ${val.join(", ")}`);
+      }
+    }
+    const fullPrompt = promptParts.join(". ");
+
+    addNarration("thinking", `Analyzing your brief for ${activity.title}...`,
+      selectedPreset ? `Target: ${selectedPreset.width}×${selectedPreset.height}px (${selectedPreset.aspect_ratio})` : undefined);
+
+    if (!online) {
+      // Offline: simulate with realistic per-skill narration
+      setTimeout(() => addNarration("tool", `Would call ${toolName}...`, "Backend offline — showing preview mode"), 600);
+      setTimeout(() => {
+        addNarration("milestone", "Preview ready (connect backend for real generation)");
+        setIterationCount((c) => c + 1);
+        setLastResult(null);
+        setPhase("iteration");
+      }, 1200);
+      return;
+    }
+
+    try {
+      addNarration("tool", `Calling ${toolName}...`,
+        selectedPreset ? `${selectedPreset.resolution || "1K"} resolution, ${selectedPreset.aspect_ratio} aspect ratio` : undefined);
+
+      const result: ExecuteResult = await futureAgents.execute(agent.name, capabilityId, {
+        prompt: fullPrompt,
+        platform,
+        options: {
+          ...answers,
+          style: answers.style,
+          iteration: iterationCount + 1,
+        },
+      });
+
+      addNarration("observation", `Image generated via ${result.provider || toolName}`,
+        result.revised_prompt ? `Revised prompt: "${result.revised_prompt.slice(0, 100)}..."` : undefined);
+      addNarration("milestone", `Iteration ${iterationCount + 1} ready for your review!`);
+
+      setLastResult(result);
+      setIterationCount((c) => c + 1);
       setPhase("iteration");
-    }, 2500);
-  };
+    } catch (err: any) {
+      const msg = err?.userMessage || err?.message || "Execution failed";
+      addNarration("observation", `Error: ${msg}`);
+      setErrorMsg(msg);
+      setPhase("error");
+    }
+  }, [activity, answers, promptText, toolConfigs, presets, capabilityId, agent.name, online, iterationCount, addNarration]);
+
+  /* ── Retry with same params ── */
+  const handleRetry = useCallback(() => {
+    const maxIter = rules?.max_iterations ?? 5;
+    if (iterationCount >= maxIter) {
+      addNarration("observation", `Max iterations (${maxIter}) reached. Approve or adjust.`);
+      return;
+    }
+    addNarration("thinking", "Generating a different angle with the same parameters...");
+    executeTask();
+  }, [executeTask, iterationCount, rules, addNarration]);
+
+  /* ── Adjust with feedback ── */
+  const handleAdjust = useCallback((feedback: string) => {
+    const maxIter = rules?.max_iterations ?? 5;
+    if (iterationCount >= maxIter) {
+      addNarration("observation", `Max iterations (${maxIter}) reached.`);
+      return;
+    }
+    addNarration("thinking", `Adjusting based on your feedback: "${feedback}"`);
+    const base = promptText || Object.values(answers).filter(Boolean).join(". ");
+    executeTask(`${base}. Adjustment: ${feedback}`);
+  }, [executeTask, promptText, answers, iterationCount, rules, addNarration]);
+
+  /* ── Approve ── */
+  const handleApprove = useCallback(() => {
+    addNarration("milestone", "Approved! Saving to artifacts and brand memory.");
+    setPhase("done");
+  }, [addNarration]);
+
+  /* ── Handle question answers ── */
+  const handleQuestionsSubmit = useCallback((ans: Record<string, string | string[]>) => {
+    setAnswers(ans);
+    setPhase("planning");
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -284,21 +521,37 @@ function ExecutionView({
         </button>
         <span className="text-2xl">{agent.avatar}</span>
         <div>
-          <p className="text-sm font-semibold text-gray-800">{agent.label} — Working</p>
-          <p className="text-[11px] text-gray-500">Task in progress</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {agent.label} — {activity?.title ?? "Working"}
+          </p>
+          <p className="text-[11px] text-gray-500">
+            {phase === "loading" ? "Loading skill definition..." :
+             phase === "questions" ? "Gathering requirements" :
+             phase === "planning" ? "Review the plan" :
+             phase === "running" ? "Generating..." :
+             phase === "iteration" ? `Iteration ${iterationCount} — review output` :
+             phase === "error" ? "Something went wrong" :
+             "Task complete"}
+          </p>
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-3xl mx-auto space-y-4">
+          {phase === "loading" && (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+            </div>
+          )}
+
           {phase === "questions" && (
             <AgentQuestionForm
               agentName={agent.label}
               avatar={agent.avatar}
-              preamble="Before I start, let me understand what you need."
-              questions={demoQuestions}
-              onSubmit={() => setPhase("planning")}
+              preamble={activity ? `Let me gather details for "${activity.title}".` : "Before I start, let me understand what you need."}
+              questions={questions}
+              onSubmit={handleQuestionsSubmit}
             />
           )}
 
@@ -306,11 +559,11 @@ function ExecutionView({
             <AgentPlanCard
               agentName={agent.label}
               avatar={agent.avatar}
-              summary="Based on your inputs, here's my plan. I'll generate a visual optimized for the selected platform, iterating until you're satisfied."
-              estimatedTime="~1 min"
-              steps={demoPlan}
-              onApprove={startExecution}
-              onModify={(fb) => { startExecution(); }}
+              summary={planSummary}
+              estimatedTime={`~${Math.max(15, plan.length * 10)}s`}
+              steps={plan}
+              onApprove={() => executeTask()}
+              onModify={(fb) => { setPromptText(fb); executeTask(fb); }}
               onCancel={onBack}
             />
           )}
@@ -327,15 +580,41 @@ function ExecutionView({
               <div className="lg:col-span-3">
                 {phase === "iteration" && (
                   <IterationPreview
-                    iteration={1}
-                    output=""
-                    imageUrl="https://placehold.co/800x800/e2e8f0/64748b?text=AI+Generated+Image"
-                    agentCommentary="Clean layout with brand colors. The 1:1 ratio works well for LinkedIn feed posts."
-                    onProceed={() => { addNarration("milestone", "Approved! Saving to brand memory and delivering."); setPhase("done"); }}
-                    onRetry={() => { addNarration("thinking", "Generating a different angle..."); }}
-                    onAdjust={(fb) => { addNarration("thinking", `Adjusting based on your feedback: "${fb}"`); }}
+                    iteration={iterationCount}
+                    output={lastResult?.revised_prompt ?? ""}
+                    imageUrl={lastResult?.image_url || `https://placehold.co/800x800/e2e8f0/64748b?text=${encodeURIComponent(activity?.title ?? "Preview")}+%28offline%29`}
+                    agentCommentary={
+                      lastResult
+                        ? `Generated via ${lastResult.provider}${lastResult.aspect_ratio ? ` at ${lastResult.aspect_ratio}` : ""}.`
+                        : `Connect backend to generate real ${activity?.title?.toLowerCase() ?? "outputs"}.`
+                    }
+                    onProceed={handleApprove}
+                    onRetry={handleRetry}
+                    onAdjust={handleAdjust}
                   />
                 )}
+              </div>
+            </div>
+          )}
+
+          {phase === "error" && (
+            <div className="text-center py-12">
+              <span className="text-5xl mb-4 block">⚠️</span>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Execution Failed</h3>
+              <p className="text-sm text-gray-500 mb-4">{errorMsg}</p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => { setErrorMsg(""); executeTask(); }}
+                  className="text-sm font-medium px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Retry
+                </button>
+                <button
+                  onClick={onBack}
+                  className="text-sm font-medium text-gray-600 hover:text-gray-700"
+                >
+                  ← Back to workspace
+                </button>
               </div>
             </div>
           )}
@@ -344,7 +623,14 @@ function ExecutionView({
             <div className="text-center py-12">
               <span className="text-5xl mb-4 block">✅</span>
               <h3 className="text-lg font-semibold text-gray-800 mb-2">Task Complete</h3>
-              <p className="text-sm text-gray-500 mb-6">Output saved to artifacts and brand memory.</p>
+              <p className="text-sm text-gray-500 mb-6">
+                {activity?.title} saved to artifacts and brand memory.
+                {lastResult?.download_url && (
+                  <a href={lastResult.download_url} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-600 hover:underline inline-flex items-center gap-1">
+                    Download <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </p>
               <button
                 onClick={onBack}
                 className="text-sm font-medium text-blue-600 hover:text-blue-700"
@@ -360,15 +646,120 @@ function ExecutionView({
       {(phase === "running" || phase === "iteration") && (
         <CommandBar
           tools={agent.tools.filter((t) => t.connected).map((t) => ({ id: t.id, label: t.name, icon: t.icon }))}
-          placeholder="Give feedback or adjust..."
+          placeholder={`Feedback for ${activity?.title ?? "this task"}...`}
           onSubmit={(text) => {
-            idRef.current += 1;
-            setNarration((n) => [...n, { id: String(idRef.current), type: "thinking", text: `Processing your feedback: "${text}"`, timestamp: "now" }]);
+            handleAdjust(text);
           }}
         />
       )}
     </div>
   );
+}
+
+/**
+ * Offline fallback: build per-skill input schemas when backend isn't available.
+ * This mirrors activities.yaml but lives in the frontend for offline UX.
+ */
+function buildOfflineSchema(capabilityId: string): ActivityDef["input_schema"] {
+  const schemas: Record<string, ActivityDef["input_schema"]> = {
+    social_visual: [
+      { id: "platform", label: "Which platform?", type: "select", options: ["LinkedIn", "Instagram", "Twitter", "Facebook"], required: true },
+      { id: "style", label: "Visual style?", type: "select", options: ["Modern Minimalist", "Bold & Colorful", "Corporate Clean", "Playful", "Dark & Premium"] },
+      { id: "details", label: "Specific elements?", type: "text", hint: "Brand colors, taglines, imagery…" },
+    ],
+    email_header: [
+      { id: "campaign", label: "Campaign name or theme?", type: "text", required: true },
+      { id: "width", label: "Header width?", type: "select", options: ["600px", "700px", "100%"] },
+    ],
+    brand_asset: [
+      { id: "asset_types", label: "Which assets?", type: "multiselect", options: ["Logo", "Banner", "Icon Set", "Social Kit", "Favicon"], required: true },
+      { id: "brand_notes", label: "Brand guidelines or notes?", type: "text" },
+    ],
+    ad_creative: [
+      { id: "platform", label: "Ad platform?", type: "select", options: ["Facebook Ads", "Google Display", "LinkedIn Ads", "Instagram Ads"], required: true },
+      { id: "variant_count", label: "How many variants?", type: "select", options: ["2", "3", "4"] },
+    ],
+    presentation_slide: [
+      { id: "topic", label: "Slide topic or title?", type: "text", required: true },
+      { id: "layout", label: "Layout style?", type: "select", options: ["Title Slide", "Content + Image", "Data Visualization", "Quote", "Comparison"] },
+    ],
+    // Copy agent
+    linkedin_post: [
+      { id: "topic", label: "Post topic?", type: "text", required: true },
+      { id: "tone", label: "Tone?", type: "select", options: ["Professional", "Conversational", "Thought Leader", "Personal Story"] },
+      { id: "cta", label: "Call to action?", type: "text", hint: "What should readers do?" },
+    ],
+    email_sequence: [
+      { id: "goal", label: "Sequence goal?", type: "select", options: ["Welcome/Onboarding", "Nurture", "Re-engagement", "Product Launch", "Event Follow-up"], required: true },
+      { id: "email_count", label: "Number of emails?", type: "select", options: ["3", "5", "7"] },
+      { id: "audience", label: "Target audience?", type: "text" },
+    ],
+    blog_article: [
+      { id: "topic", label: "Article topic?", type: "text", required: true },
+      { id: "word_count", label: "Target length?", type: "select", options: ["600 words", "1200 words", "2000 words"] },
+      { id: "keywords", label: "Target keywords?", type: "text", hint: "Comma-separated" },
+    ],
+    ad_copy: [
+      { id: "platform", label: "Ad platform?", type: "select", options: ["Google Ads", "Facebook", "LinkedIn", "Twitter"], required: true },
+      { id: "product", label: "Product or feature?", type: "text", required: true },
+      { id: "variant_count", label: "How many variants?", type: "select", options: ["2", "3", "5"] },
+    ],
+    // SEO agent
+    keyword_strategy: [
+      { id: "topic", label: "Topic or niche?", type: "text", required: true },
+      { id: "market", label: "Target market?", type: "select", options: ["US", "UK", "EU", "Global", "APAC"] },
+      { id: "intent", label: "Search intent?", type: "multiselect", options: ["Informational", "Transactional", "Navigational", "Commercial"] },
+    ],
+    content_optimization: [
+      { id: "content", label: "Paste content or URL", type: "text", required: true },
+      { id: "target_keyword", label: "Primary target keyword?", type: "text" },
+    ],
+    seo_audit: [
+      { id: "url", label: "Page URL to audit", type: "text", required: true },
+    ],
+    // PM agent
+    brief_decompose: [
+      { id: "brief", label: "Paste the campaign brief", type: "text", required: true },
+      { id: "agents", label: "Which agents should be involved?", type: "multiselect", options: ["Copywriter", "Designer", "SEO", "Product Marketing"] },
+    ],
+    // Competitive Intel
+    competitor_analysis: [
+      { id: "competitors", label: "Competitor names (comma-separated)", type: "text", required: true },
+      { id: "focus", label: "Analysis focus?", type: "select", options: ["Positioning", "Pricing", "Content Strategy", "Product Features", "Full Analysis"] },
+    ],
+    market_gaps: [
+      { id: "market", label: "Describe your market", type: "text", required: true },
+    ],
+    // Product Marketing
+    positioning: [
+      { id: "product", label: "Product or feature name?", type: "text", required: true },
+      { id: "audience", label: "Target persona?", type: "text", hint: "e.g. VP of Marketing" },
+    ],
+    messaging_matrix: [
+      { id: "product", label: "Product or campaign?", type: "text", required: true },
+      { id: "audiences", label: "Target audiences?", type: "multiselect", options: ["C-Suite", "VP Marketing", "Marketing Manager", "Developer", "End User"] },
+    ],
+    launch_narrative: [
+      { id: "product", label: "What are you launching?", type: "text", required: true },
+      { id: "channels", label: "Distribution channels?", type: "multiselect", options: ["Blog", "Email", "Social Media", "Product Hunt", "Press Release"] },
+    ],
+    // Review agent
+    content_review: [
+      { id: "content", label: "Paste the content to review", type: "text", required: true },
+      { id: "criteria", label: "Review criteria?", type: "multiselect", options: ["Brand Fit", "Clarity", "CTA Strength", "Grammar", "Tone"] },
+    ],
+    brand_check: [
+      { id: "content", label: "Paste content to check against brand", type: "text", required: true },
+    ],
+    // Research agent
+    market_research: [
+      { id: "query", label: "Research question?", type: "text", required: true },
+    ],
+    context_brief: [
+      { id: "topic", label: "Topic for context brief?", type: "text", required: true },
+    ],
+  };
+  return schemas[capabilityId] ?? [{ id: "prompt", label: "What do you need?", type: "text", required: true }];
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -380,7 +771,7 @@ export default function AgentWorkspacePage() {
   const agentName = typeof params.name === "string" ? params.name : (params.name?.[0] ?? "design");
   const { online } = useBackend();
 
-  const [executing, setExecuting] = useState(false);
+  const [executing, setExecuting] = useState<string | null>(null);
 
   const agent = DEMO_AGENTS[agentName] || DEMO_AGENTS.design;
   const toolOptions: ToolOption[] = agent.tools
@@ -389,7 +780,7 @@ export default function AgentWorkspacePage() {
 
   /* ── Execution View ─────────────────────────────────────────── */
   if (executing) {
-    return <ExecutionView agent={agent} onBack={() => setExecuting(false)} />;
+    return <ExecutionView agent={agent} capabilityId={executing} onBack={() => setExecuting(null)} />;
   }
 
   /* ── Workspace View ─────────────────────────────────────────── */
@@ -477,7 +868,7 @@ export default function AgentWorkspacePage() {
                 <CapabilityCard
                   key={cap.id}
                   capability={cap}
-                  onStart={() => setExecuting(true)}
+                  onStart={(capId) => setExecuting(capId)}
                 />
               ))}
             </div>
@@ -507,7 +898,11 @@ export default function AgentWorkspacePage() {
           agent.name === "seo" ? "What content should I optimize?" :
           "Describe what you need..."
         }
-        onSubmit={() => setExecuting(true)}
+        onSubmit={(text) => {
+          // Find best matching capability from prompt (default to first)
+          const firstCap = agent.capabilities[0]?.id;
+          setExecuting(firstCap ?? null);
+        }}
       />
     </div>
   );
