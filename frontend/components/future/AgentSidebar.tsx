@@ -100,12 +100,12 @@ export default function AgentSidebar({ agents, pendingApprovals = 0 }: Props) {
     <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0 h-full">
       {/* Header */}
       <div className="px-4 pt-5 pb-3 border-b border-gray-100">
-        <Link href="/future/agent" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
             <span className="text-white text-xs font-bold">Z</span>
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-800 leading-none">Zeta Agents</p>
+            <p className="text-sm font-semibold text-gray-800 leading-none">Zeta IMA</p>
             <p className="text-[10px] text-gray-400 mt-0.5">AI Marketing Agency</p>
           </div>
         </Link>
