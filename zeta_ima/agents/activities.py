@@ -42,6 +42,30 @@ class ActivityDefinition:
     output_type: str
 
 
+    # ── Skill-slug → activity ID mapping ──────────────────────────
+    # Used by Teams bot so designers can type "/socialmedia" instead
+    # of remembering the internal activity ID "social_visual".
+
+SKILL_SLUG_MAP: dict[str, str] = {
+    # Design agent
+    "socialmedia": "social_visual",
+    "social": "social_visual",
+    "emailheader": "email_header",
+    "email": "email_header",
+    "brand": "brand_asset",
+    "brandpack": "brand_asset",
+    "ad": "ad_creative",
+    "adcreative": "ad_creative",
+    "slide": "presentation_slide",
+    "presentation": "presentation_slide",
+    # Copy agent
+    "linkedin": "linkedin_post",
+    "emailsequence": "email_sequence",
+    "blog": "blog_article",
+    "adcopy": "ad_copy",
+}
+
+
 class ActivityRegistry:
     _instance: ActivityRegistry | None = None
 
@@ -63,6 +87,14 @@ class ActivityRegistry:
 
     def get(self, activity_id: str) -> ActivityDefinition | None:
         return self._activities.get(activity_id)
+
+    def get_by_slug(self, slug: str) -> ActivityDefinition | None:
+        """Resolve a Teams slash-command slug to an activity definition."""
+        activity_id = SKILL_SLUG_MAP.get(slug.lower().strip("/"))
+        if activity_id:
+            return self._activities.get(activity_id)
+        # Fallback: try using slug directly as activity ID
+        return self._activities.get(slug)
 
     def all(self) -> list[ActivityDefinition]:
         return list(self._activities.values())

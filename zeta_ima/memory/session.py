@@ -41,6 +41,31 @@ def make_thread_config(teams_conversation_id: str) -> dict:
     return {"configurable": {"thread_id": teams_conversation_id}}
 
 
+# ── Design state (short-lived Redis cache for iteration loop) ────────────────
+
+import json as _json
+
+async def save_design_state(thread_id: str, state: dict) -> None:
+    """Cache design execution result in Redis for iteration (retry/adjust)."""
+    import redis.asyncio as aioredis
+    r = aioredis.from_url(settings.redis_url)
+    key = f"zima:design_state:{thread_id}"
+    await r.set(key, _json.dumps(state, default=str), ex=settings.session_ttl_hours * 3600)
+    await r.aclose()
+
+
+async def load_design_state(thread_id: str) -> dict | None:
+    """Load cached design state for iteration."""
+    import redis.asyncio as aioredis
+    r = aioredis.from_url(settings.redis_url)
+    key = f"zima:design_state:{thread_id}"
+    data = await r.get(key)
+    await r.aclose()
+    if data:
+        return _json.loads(data)
+    return None
+
+
 # ── Shared DB helpers (Genesis v2) ────────────────────────────────────────────
 
 _pool: asyncpg.Pool | None = None

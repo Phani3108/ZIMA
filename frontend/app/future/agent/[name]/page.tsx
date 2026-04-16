@@ -426,6 +426,15 @@ export default function AgentWorkspacePage() {
                 <span><strong className="text-gray-700">{agent.stats.toolsConnected}</strong> tools connected</span>
               </div>
             </div>
+            {agentName === "design" && (
+              <a
+                href="/future/agent/design/config"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors shrink-0"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                Configure Engine
+              </a>
+            )}
           </div>
 
           {/* ── ZONE 2: Toolbox ───────────────────────────────── */}
@@ -453,9 +462,16 @@ export default function AgentWorkspacePage() {
             </div>
           </section>
 
-          {/* ── ZONE 3: Capabilities ──────────────────────────── */}
+          {/* ── ZONE 3: Skills (What I Can Do) ──────────────── */}
           <section>
-            <h2 className="text-sm font-semibold text-gray-700 mb-3">What I Can Do</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-700">What I Can Do</h2>
+              {agentName === "design" && (
+                <p className="text-[11px] text-gray-400">
+                  Teams: <code className="bg-gray-100 px-1 py-0.5 rounded text-[10px]">@Zima /socialmedia /prompt ...</code>
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {agent.capabilities.map((cap) => (
                 <CapabilityCard

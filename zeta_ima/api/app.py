@@ -52,6 +52,7 @@ from zeta_ima.api.routes.future_chat import router as future_chat_router
 from zeta_ima.api.routes.future_templates import router as future_templates_router
 from zeta_ima.api.routes.future_agents import router as future_agents_router
 from zeta_ima.api.routes.future_approvals import router as future_approvals_router
+from zeta_ima.api.routes.design_config import router as design_config_router
 from zeta_ima.memory.brand import ensure_collection
 from zeta_ima.memory.campaign import init_db
 from zeta_ima.ingest.pipeline import init_ingest_db
@@ -271,6 +272,14 @@ def create_app() -> FastAPI:
             import logging
             logging.getLogger(__name__).warning(f"Job history DB init: {e}")
 
+        # Design engine config tables
+        try:
+            from zeta_ima.agents.design_config import init_design_config_db
+            await init_design_config_db()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Design config DB init: {e}")
+
     # Teams bot webhook (no auth — authenticated by Bot Framework)
     app.include_router(activity_router)
 
@@ -319,6 +328,9 @@ def create_app() -> FastAPI:
     app.include_router(future_templates_router)
     app.include_router(future_agents_router)
     app.include_router(future_approvals_router)
+
+    # Design engine configuration (manager-only)
+    app.include_router(design_config_router)
 
     return app
 

@@ -470,6 +470,31 @@ export const futureAgents = {
   },
   activities: (name: string) => fetchJSON(`/future/agents/${name}/activities`),
   activity: (name: string, actId: string) => fetchJSON(`/future/agents/${name}/activities/${actId}`),
+  execute: (name: string, actId: string, body: { prompt: string; platform?: string; options?: Record<string, any> }) =>
+    fetchJSON(`/future/agents/${name}/activities/${actId}/execute`, { method: "POST", body: JSON.stringify(body) }),
+};
+
+// ─── Design Engine Config ───────────────────────────────────────────
+
+export const designConfig = {
+  getTools: () => fetchJSON("/design/config/tools"),
+  putTool: (body: { skill_id: string; primary_tool: string; backup_tool: string; enabled?: boolean }) =>
+    fetchJSON("/design/config/tools", { method: "PUT", body: JSON.stringify(body) }),
+  getPresets: (skillId?: string) => {
+    const params = skillId ? `?skill_id=${encodeURIComponent(skillId)}` : "";
+    return fetchJSON(`/design/config/presets${params}`);
+  },
+  putPreset: (body: {
+    skill_id: string; platform: string; label?: string;
+    width: number; height: number; aspect_ratio?: string;
+    resolution?: string; format?: string;
+  }) => fetchJSON("/design/config/presets", { method: "PUT", body: JSON.stringify(body) }),
+  getRules: () => fetchJSON("/design/config/rules"),
+  putRules: (body: {
+    max_iterations?: number; default_quality?: string;
+    auto_review?: boolean; auto_approve_min_score?: number;
+    style_prompt_prefix?: string;
+  }) => fetchJSON("/design/config/rules", { method: "PUT", body: JSON.stringify(body) }),
 };
 
 // ─── Future: Approvals ──────────────────────────────────────────────

@@ -3,14 +3,17 @@ Teams bot — ActivityHandler for the Zeta IMA multi-agent system.
 
 Handles:
   1. on_message_activity  — user sends text or attaches a file
-  2. on_invoke_activity   — user clicks Approve/Reject/Plan actions on Adaptive Cards
+  2. on_invoke_activity   — user clicks Approve/Reject/Plan/Design actions on Adaptive Cards
   3. on_members_added_activity — welcome message
 
-Special commands (parsed from message text):
-  "share with @Alice ..."  → proactive DM to Alice's stored conversation ref
-  "what's pending"         → list items awaiting action
-  "status" / "digest"     → daily digest card
-  Attachment (PDF/DOCX/txt) → trigger ingestion pipeline
+Slash commands (design agent — parsed from message text):
+  "@Zima /socialmedia /prompt ..."  → design skill execution
+  "/skills" or "/help"             → list available skills
+  "share with @Alice ..."          → proactive DM to Alice's stored conversation ref
+  "what's pending"                 → list items awaiting action
+  "status" / "digest"              → daily digest card
+
+Everything else → treated as a general brief → LangGraph agent.
 
 The Teams conversation ID is used as the LangGraph thread_id.
 ConversationReference is saved on every message for proactive messaging.
@@ -22,13 +25,19 @@ from botbuilder.core import ActivityHandler, MessageFactory, TurnContext
 from botbuilder.schema import Activity, ActivityTypes
 from langgraph.types import Command
 
+from zeta_ima.agents.activities import ActivityRegistry, SKILL_SLUG_MAP
 from zeta_ima.agents.graph import graph
 from zeta_ima.agents.state import AgentState
 from zeta_ima.bot.cards import (
     approved_confirmation_card,
+    design_approved_card,
+    design_thinking_card,
     draft_approval_card,
     execution_status_card,
+    image_result_card,
     meeting_plan_card,
+    questions_card,
+    skills_list_card,
     status_summary_card,
     thinking_card,
 )
@@ -38,9 +47,41 @@ from zeta_ima.notify.graph import save_conversation_ref, send_proactive_card
 
 _ADAPTIVE_CARD_CONTENT_TYPE = "application/vnd.microsoft.card.adaptive"
 
+# ── Slash-command regex ─────────────────────────────────────────────────────
+# Matches: @Zima /socialmedia /prompt <text>
+# Also:    /socialmedia /prompt <text>  (without @mention)
+_SKILL_CMD_RE = re.compile(
+    r"(?:@\w+\s+)?/(\w+)\s+/prompt\s+(.+)",
+    re.IGNORECASE | re.DOTALL,
+)
+# Match: /skills or /help (with optional @mention)
+_SKILLS_LIST_RE = re.compile(r"(?:@\w+\s+)?/(skills|help)\s*$", re.IGNORECASE)
+
 
 def _card_attachment(card: dict) -> dict:
     return {"contentType": _ADAPTIVE_CARD_CONTENT_TYPE, "content": card}
+
+
+def _build_skills_list() -> list[dict]:
+    """Build skills list for the skills_list_card from activities.yaml."""
+    registry = ActivityRegistry.get_instance()
+    activities = registry.list_for_agent("design")
+    # Reverse map: activity_id → first slug
+    id_to_slug: dict[str, str] = {}
+    for slug, act_id in SKILL_SLUG_MAP.items():
+        if act_id not in id_to_slug:
+            id_to_slug[act_id] = slug
+
+    skills = []
+    for act in activities:
+        slug = id_to_slug.get(act.id, act.id)
+        skills.append({
+            "slug": slug,
+            "title": act.title,
+            "description": act.description,
+            "example": f"Create a {act.title.lower()} for our product launch",
+        })
+    return skills
 
 
 class ZetaMarketingBot(ActivityHandler):
@@ -70,6 +111,25 @@ class ZetaMarketingBot(ActivityHandler):
             )
             return
 
+        # ── /skills or /help command ─────────────────────────────────
+        if _SKILLS_LIST_RE.match(user_message):
+            skills = _build_skills_list()
+            card = skills_list_card("Design Agent", skills)
+            await turn_context.send_activity(
+                MessageFactory.attachment(_card_attachment(card))
+            )
+            return
+
+        # ── /skill /prompt command (design execution) ────────────────
+        skill_match = _SKILL_CMD_RE.match(user_message)
+        if skill_match:
+            skill_slug = skill_match.group(1).lower()
+            prompt_text = skill_match.group(2).strip()
+            await self._handle_design_command(
+                turn_context, skill_slug, prompt_text, user_id, conversation_id
+            )
+            return
+
         # "share with @Alice ..." command
         share_match = re.search(r"share\s+(?:this\s+)?with\s+@?(\w+)", user_message, re.IGNORECASE)
         if share_match:
@@ -86,6 +146,7 @@ class ZetaMarketingBot(ActivityHandler):
             await self._handle_digest(turn_context, user_id)
             return
 
+        # ── Default: treat as general brief → LangGraph ──────────────
         config = make_thread_config(conversation_id)
         await turn_context.send_activity(
             MessageFactory.attachment(_card_attachment(thinking_card(user_message)))
@@ -124,6 +185,162 @@ class ZetaMarketingBot(ActivityHandler):
 
         result = await graph.ainvoke(initial_state, config=config)
         await self._send_result(turn_context, result)
+
+    # ── Design slash-command handler ─────────────────────────────────────────
+
+    async def _handle_design_command(
+        self,
+        turn_context: TurnContext,
+        skill_slug: str,
+        prompt_text: str,
+        user_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Handle /skill /prompt commands for the Design Agent."""
+        from dataclasses import asdict
+
+        registry = ActivityRegistry.get_instance()
+        activity_def = registry.get_by_slug(skill_slug)
+
+        if activity_def is None:
+            await turn_context.send_activity(
+                MessageFactory.text(
+                    f"Unknown skill `/{skill_slug}`. Type `/skills` to see available commands."
+                )
+            )
+            return
+
+        if activity_def.agent != "design":
+            await turn_context.send_activity(
+                MessageFactory.text(
+                    f"`/{skill_slug}` belongs to the {activity_def.agent} agent. "
+                    f"Design skills: type `/skills` to see the list."
+                )
+            )
+            return
+
+        # Check for required fields not provided in the prompt
+        required_fields = [f for f in activity_def.input_schema if f.required]
+        if required_fields:
+            # Send questions card for the designer to fill in
+            q_data = [
+                {
+                    "id": f.id,
+                    "label": f.label,
+                    "type": f.type,
+                    "options": f.options,
+                    "required": f.required,
+                    "hint": f.hint,
+                }
+                for f in activity_def.input_schema
+            ]
+            card = questions_card(
+                skill_title=activity_def.title,
+                questions=q_data,
+                skill_id=activity_def.id,
+                prompt=prompt_text,
+            )
+            await turn_context.send_activity(
+                MessageFactory.attachment(_card_attachment(card))
+            )
+            return
+
+        # No required fields — execute directly
+        await self._execute_design(
+            turn_context, activity_def, prompt_text, "", user_id
+        )
+
+    async def _execute_design(
+        self,
+        turn_context: TurnContext,
+        activity_def,
+        prompt_text: str,
+        platform: str,
+        user_id: str,
+    ) -> None:
+        """Run design_node and send the result card."""
+        # Send thinking card
+        card = design_thinking_card(activity_def.title, prompt_text)
+        await turn_context.send_activity(
+            MessageFactory.attachment(_card_attachment(card))
+        )
+
+        from zeta_ima.agents.nodes.design_node import design_node
+
+        initial_state: AgentState = {
+            "messages": [{"role": "user", "content": prompt_text}],
+            "current_brief": prompt_text,
+            "drafts": [],
+            "current_draft": {},
+            "review_result": {},
+            "iteration_count": 0,
+            "user_id": user_id,
+            "user_teams_id": user_id,
+            "active_campaign_id": None,
+            "stage": "executing",
+            "approval_decision": None,
+            "approval_comment": None,
+            "brand_examples": [],
+            "intent": "design",
+            "route_to": ["design"],
+            "tool_results": {
+                "_skill_id": activity_def.id,
+                "_platform": platform,
+            },
+            "kb_context": [],
+            "pipeline": ["design"],
+            "pipeline_index": 0,
+            "agent_messages": [],
+            "meeting_transcript": [],
+            "meeting_plan": {},
+            "plan_status": "",
+            "user_plan_modifications": None,
+            "brain_context": [],
+        }
+
+        result = await design_node(initial_state)
+        design_result = result.get("tool_results", {}).get("design", {})
+
+        if design_result.get("ok"):
+            card = image_result_card(
+                image_url=design_result.get("image_url", ""),
+                download_url=design_result.get("download_url", ""),
+                prompt=design_result.get("revised_prompt", prompt_text),
+                provider=design_result.get("provider", ""),
+                aspect_ratio=design_result.get("aspect_ratio", ""),
+                skill_title=activity_def.title,
+                platform=platform,
+            )
+            # Store result in conversation state for iteration
+            try:
+                config = make_thread_config(turn_context.activity.conversation.id)
+                from zeta_ima.memory.session import save_design_state
+                await save_design_state(config["configurable"]["thread_id"], {
+                    "skill_id": activity_def.id,
+                    "prompt": prompt_text,
+                    "platform": platform,
+                    "result": design_result,
+                })
+            except Exception:
+                pass
+        else:
+            error = design_result.get("error", "Unknown error")
+            card = {
+                "type": "AdaptiveCard",
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.5",
+                "body": [{
+                    "type": "TextBlock",
+                    "text": f"❌ Design generation failed: {error}",
+                    "weight": "Bolder",
+                    "color": "Attention",
+                    "wrap": True,
+                }],
+            }
+
+        await turn_context.send_activity(
+            MessageFactory.attachment(_card_attachment(card))
+        )
 
     async def _handle_attachments(self, turn_context: TurnContext, attachments, user_id: str):
         """Ingest file attachments from Teams."""
@@ -184,7 +401,7 @@ class ZetaMarketingBot(ActivityHandler):
             await turn_context.send_activity(MessageFactory.text(f"Share failed: {e}"))
 
     async def on_invoke_activity(self, turn_context: TurnContext) -> None:
-        """Handle Adaptive Card button clicks — draft approval + plan approval."""
+        """Handle Adaptive Card button clicks — draft approval + plan approval + design actions."""
         activity = turn_context.activity
         value = activity.value or {}
 
@@ -193,6 +410,116 @@ class ZetaMarketingBot(ActivityHandler):
         modifications = value.get("modifications", "")
         conversation_id = activity.conversation.id
         config = make_thread_config(conversation_id)
+        user_id = activity.from_property.id
+
+        # ── Design actions ────────────────────────────────────────────────────
+
+        if action == "design_execute":
+            # Questions card submitted — extract answers and execute
+            skill_id = value.get("skill_id", "")
+            prompt = value.get("prompt", "")
+            registry = ActivityRegistry.get_instance()
+            activity_def = registry.get(skill_id)
+            if not activity_def:
+                await turn_context.send_activity(
+                    MessageFactory.text("Skill not found. Type `/skills` for available commands.")
+                )
+                return
+
+            # Extract platform from answers (q_platform field)
+            platform = value.get("q_platform", "")
+            # Map friendly platform names to preset keys
+            PLATFORM_MAP = {
+                "LinkedIn": "linkedin_post", "Instagram": "instagram_post",
+                "Twitter": "twitter_post", "Facebook": "facebook_post",
+                "Facebook Ads": "facebook_ad", "Google Display": "google_display",
+                "LinkedIn Ads": "linkedin_ad", "Instagram Ads": "instagram_ad",
+            }
+            platform = PLATFORM_MAP.get(platform, platform.lower().replace(" ", "_") if platform else "")
+
+            # Append any extra context from form fields to prompt
+            extras = []
+            for key, val in value.items():
+                if key.startswith("q_") and key != "q_platform" and val:
+                    field_name = key[2:]  # strip q_ prefix
+                    extras.append(f"{field_name}: {val}")
+            if extras:
+                prompt = f"{prompt}\n\n{chr(10).join(extras)}"
+
+            await self._execute_design(
+                turn_context, activity_def, prompt, platform, user_id
+            )
+            return
+
+        if action == "design_cancel":
+            await turn_context.send_activity(
+                MessageFactory.text("Design request cancelled. Send a new `/skill /prompt` when ready.")
+            )
+            return
+
+        if action == "design_approve":
+            # Approve design — save to brand memory
+            try:
+                from zeta_ima.memory.session import load_design_state
+                ds = await load_design_state(conversation_id)
+                image_url = ds.get("result", {}).get("image_url", "") if ds else ""
+                download_url = ds.get("result", {}).get("download_url", "") if ds else ""
+            except Exception:
+                image_url = ""
+                download_url = ""
+
+            card = design_approved_card(image_url, download_url)
+            await turn_context.send_activity(
+                MessageFactory.attachment(_card_attachment(card))
+            )
+            return
+
+        if action == "design_retry":
+            # Re-run with same parameters
+            try:
+                from zeta_ima.memory.session import load_design_state
+                ds = await load_design_state(conversation_id)
+                if ds:
+                    registry = ActivityRegistry.get_instance()
+                    activity_def = registry.get(ds["skill_id"])
+                    if activity_def:
+                        await self._execute_design(
+                            turn_context, activity_def, ds["prompt"], ds.get("platform", ""), user_id
+                        )
+                        return
+            except Exception:
+                pass
+            await turn_context.send_activity(
+                MessageFactory.text("Couldn't retry — please send the command again.")
+            )
+            return
+
+        if action == "design_adjust":
+            # Re-run with adjusted prompt
+            feedback = value.get("adjust_feedback", "")
+            if not feedback:
+                await turn_context.send_activity(
+                    MessageFactory.text("Please type your adjustments in the text box and click Adjust again.")
+                )
+                return
+            try:
+                from zeta_ima.memory.session import load_design_state
+                ds = await load_design_state(conversation_id)
+                if ds:
+                    registry = ActivityRegistry.get_instance()
+                    activity_def = registry.get(ds["skill_id"])
+                    if activity_def:
+                        adjusted_prompt = f"{ds['prompt']}\n\nAdjustments: {feedback}"
+                        await self._execute_design(
+                            turn_context, activity_def, adjusted_prompt, ds.get("platform", ""), user_id
+                        )
+                        return
+            except Exception:
+                pass
+            await turn_context.send_activity(
+                MessageFactory.text("Couldn't apply adjustments — please send the command again.")
+            )
+            return
 
         # ── Recall verbs (prior work recognition) ─────────────────────────────
         if action in ("recall_reuse", "recall_modify", "recall_fresh"):

@@ -8,6 +8,7 @@ import {
   ClipboardCheck, FlaskConical, Settings, ChevronDown,
   Brain, BarChart2, DollarSign, Archive, MessageSquare,
   Share2, Users, CalendarClock, Upload, FolderKanban,
+  Wrench,
 } from "lucide-react";
 
 export type AgentNavItem = {
@@ -148,8 +149,20 @@ export default function AgentSidebar({ agents, pendingApprovals = 0 }: Props) {
           })}
         </div>
 
-        {/* ── Approvals + Programs ─────────────────────────── */}
+        {/* ── Approvals + Programs + Engine Config ─────────── */}
         <div className="mt-4 space-y-0.5">
+          <Link
+            href="/future/agent/design/config"
+            className={clsx(
+              "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors",
+              path === "/future/agent/design/config"
+                ? "bg-blue-50 text-blue-700 font-medium"
+                : "text-gray-600 hover:bg-gray-50",
+            )}
+          >
+            <Wrench className="w-4 h-4" />
+            Engine Config
+          </Link>
           <Link
             href="/future/approvals"
             className={clsx(

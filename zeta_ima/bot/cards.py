@@ -13,6 +13,356 @@ from zeta_ima.config import settings
 _FRONTEND = settings.frontend_url
 
 
+# ── Design Agent Cards ──────────────────────────────────────────────────────
+
+
+def skills_list_card(agent_name: str, skills: list[dict]) -> dict:
+    """
+    Card listing available skills for an agent.
+    Shown when designer types /skills or /help in Teams.
+    Each skill shows: title, description, example usage.
+    """
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": f"🎨 {agent_name} — Available Skills",
+            "weight": "Bolder",
+            "size": "Medium",
+            "color": "Accent",
+        },
+        {
+            "type": "TextBlock",
+            "text": "Use these slash commands to create designs:",
+            "isSubtle": True,
+            "wrap": True,
+        },
+        {"type": "Separator"},
+    ]
+
+    for skill in skills:
+        slug = skill.get("slug", "")
+        title = skill.get("title", "")
+        desc = skill.get("description", "")
+        example = skill.get("example", "")
+
+        body.append({
+            "type": "Container",
+            "style": "emphasis",
+            "spacing": "Small",
+            "items": [
+                {
+                    "type": "TextBlock",
+                    "text": f"**/{slug}** — {title}",
+                    "weight": "Bolder",
+                    "wrap": True,
+                },
+                {
+                    "type": "TextBlock",
+                    "text": desc,
+                    "wrap": True,
+                    "isSubtle": True,
+                },
+                {
+                    "type": "TextBlock",
+                    "text": f"💡 `@Zima /{slug} /prompt {example}`",
+                    "wrap": True,
+                    "size": "Small",
+                    "color": "Accent",
+                },
+            ],
+        })
+
+    body.append({"type": "Separator"})
+    body.append({
+        "type": "TextBlock",
+        "text": "_Tip: Add /prompt followed by your instructions_",
+        "isSubtle": True,
+        "wrap": True,
+        "size": "Small",
+    })
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": [{
+            "type": "Action.OpenUrl",
+            "title": "View all skills →",
+            "url": f"{_FRONTEND}/future/agent/design",
+        }],
+    }
+
+
+def questions_card(
+    skill_title: str,
+    questions: list[dict],
+    skill_id: str,
+    prompt: str,
+) -> dict:
+    """
+    Adaptive Card with input fields matching the activity's input_schema.
+    Shown when designer invokes a skill with missing required fields.
+
+    Each question → Input.Text or Input.ChoiceSet based on type.
+    """
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": f"🖌️ Design Agent has a few questions",
+            "weight": "Bolder",
+            "size": "Medium",
+            "color": "Accent",
+        },
+        {
+            "type": "TextBlock",
+            "text": f"Skill: **{skill_title}**",
+            "wrap": True,
+        },
+        {
+            "type": "TextBlock",
+            "text": f"Your prompt: _{prompt[:200]}_",
+            "isSubtle": True,
+            "wrap": True,
+        },
+        {"type": "Separator"},
+    ]
+
+    for q in questions:
+        field_id = q["id"]
+        label = q["label"]
+        field_type = q.get("type", "text")
+        options = q.get("options", [])
+        required = q.get("required", False)
+        hint = q.get("hint", "")
+
+        req_marker = " *" if required else ""
+
+        if field_type in ("select", "multiselect") and options:
+            choices = [{"title": opt, "value": opt} for opt in options]
+            body.append({
+                "type": "TextBlock",
+                "text": f"{label}{req_marker}",
+                "weight": "Bolder",
+                "size": "Small",
+            })
+            body.append({
+                "type": "Input.ChoiceSet",
+                "id": f"q_{field_id}",
+                "style": "compact",
+                "isMultiSelect": field_type == "multiselect",
+                "placeholder": f"Select{' one or more' if field_type == 'multiselect' else ''}...",
+                "choices": choices,
+            })
+        else:
+            placeholder = hint if hint else f"Enter {label.lower()}..."
+            body.append({
+                "type": "Input.Text",
+                "id": f"q_{field_id}",
+                "label": f"{label}{req_marker}",
+                "placeholder": placeholder,
+                "isMultiline": len(placeholder) > 50,
+            })
+
+    actions = [
+        {
+            "type": "Action.Execute",
+            "title": "▶️ Generate",
+            "verb": "design_execute",
+            "data": {
+                "action": "design_execute",
+                "skill_id": skill_id,
+                "prompt": prompt,
+            },
+            "style": "positive",
+        },
+        {
+            "type": "Action.Execute",
+            "title": "❌ Cancel",
+            "verb": "design_cancel",
+            "data": {"action": "design_cancel"},
+            "style": "destructive",
+        },
+    ]
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def image_result_card(
+    image_url: str,
+    download_url: str,
+    prompt: str,
+    provider: str,
+    aspect_ratio: str,
+    skill_title: str,
+    platform: str = "",
+) -> dict:
+    """
+    Card showing the generated image with download/share/iterate actions.
+    Image displayed inline if URL is accessible; otherwise shows link.
+    """
+    platform_text = f" ({platform.replace('_', ' ').title()})" if platform else ""
+
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": f"🖼️ {skill_title}{platform_text} — Ready",
+            "weight": "Bolder",
+            "size": "Medium",
+            "color": "Good",
+        },
+    ]
+
+    # Show image inline if URL is available
+    if image_url and not image_url.startswith("file://"):
+        body.append({
+            "type": "Image",
+            "url": image_url,
+            "altText": "Generated design",
+            "size": "Large",
+        })
+    elif image_url:
+        body.append({
+            "type": "TextBlock",
+            "text": f"📎 [View Image]({image_url})",
+            "wrap": True,
+        })
+
+    body.extend([
+        {"type": "Separator"},
+        {
+            "type": "FactSet",
+            "facts": [
+                {"title": "Provider", "value": provider},
+                {"title": "Aspect Ratio", "value": aspect_ratio},
+                {"title": "Prompt", "value": prompt[:200]},
+            ],
+        },
+        {
+            "type": "Input.Text",
+            "id": "adjust_feedback",
+            "placeholder": "Any adjustments? (e.g., 'make it brighter', 'add more text')",
+            "isMultiline": True,
+        },
+    ])
+
+    actions = [
+        {
+            "type": "Action.Execute",
+            "title": "✅ Looks Good",
+            "verb": "design_approve",
+            "data": {"action": "design_approve"},
+            "style": "positive",
+        },
+        {
+            "type": "Action.Execute",
+            "title": "🔄 Try Another",
+            "verb": "design_retry",
+            "data": {"action": "design_retry"},
+        },
+        {
+            "type": "Action.Execute",
+            "title": "✏️ Adjust",
+            "verb": "design_adjust",
+            "data": {"action": "design_adjust"},
+        },
+    ]
+
+    if download_url:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "⬇️ Download",
+            "url": download_url,
+        })
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def design_approved_card(image_url: str, download_url: str) -> dict:
+    """Confirmation card after designer approves a design."""
+    body: list = [
+        {
+            "type": "TextBlock",
+            "text": "✅ Design approved and saved to brand memory.",
+            "weight": "Bolder",
+            "color": "Good",
+        },
+    ]
+
+    if image_url and not image_url.startswith("file://"):
+        body.append({
+            "type": "Image",
+            "url": image_url,
+            "altText": "Approved design",
+            "size": "Medium",
+        })
+
+    actions = []
+    if download_url:
+        actions.append({
+            "type": "Action.OpenUrl",
+            "title": "⬇️ Download",
+            "url": download_url,
+        })
+    actions.append({
+        "type": "Action.OpenUrl",
+        "title": "View in dashboard →",
+        "url": f"{_FRONTEND}/future/agent/design",
+    })
+
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def design_thinking_card(skill_title: str, prompt: str) -> dict:
+    """Ephemeral 'Working...' card for design generation."""
+    return {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.5",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": f"🖌️ Working on your {skill_title}...",
+                "weight": "Bolder",
+                "color": "Accent",
+            },
+            {
+                "type": "TextBlock",
+                "text": f"Prompt: {prompt[:150]}",
+                "isSubtle": True,
+                "wrap": True,
+            },
+            {
+                "type": "TextBlock",
+                "text": "⏳ Generating image — this usually takes 10-30 seconds.",
+                "isSubtle": True,
+                "wrap": True,
+            },
+        ],
+    }
+
+
+# ── Original Cards (copy/general workflows) ────────────────────────────────
+
+
 def draft_approval_card(
     draft: str,
     review: dict,
